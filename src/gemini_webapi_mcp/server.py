@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import sys
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -56,6 +57,117 @@ _MODEL_ID_MAP = {
     "9d8ca3786ebdfbea": "e6fa609c3fa255c0",   # Pro
     "5bf011840784117a": "e051ce1aa80aa576",   # Flash-Thinking
 }
+
+# ---------------------------------------------------------------------------
+# LaMa watermark removal (optional — requires onnxruntime)
+# ---------------------------------------------------------------------------
+_LAMA_URL = "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx"
+_LAMA_CACHE = Path.home() / ".cache" / "gemini-mcp" / "lama_fp32.onnx"
+_lama_session = None
+
+# Watermark is a 4-point sparkle, always at the same fixed position:
+# center at (w-57, h-57), bounding box from (w-80, h-80) to (w-33, h-33).
+# Verified across 1024x1024, 1376x768, 768x1376 images.
+_WM_OFFSET = 57       # center offset from bottom-right corner
+_WM_RADIUS = 24       # half of 48px bbox
+
+
+def _get_lama_session():
+    """Download LaMa model on first use, return ONNX InferenceSession or None."""
+    global _lama_session
+    if _lama_session is not None:
+        return _lama_session
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return None
+    if not _LAMA_CACHE.exists():
+        _LAMA_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading LaMa model (208 MB)...")
+        urllib.request.urlretrieve(_LAMA_URL, _LAMA_CACHE)
+        logger.info("LaMa model downloaded to %s", _LAMA_CACHE)
+    _lama_session = ort.InferenceSession(
+        str(_LAMA_CACHE), providers=["CPUExecutionProvider"]
+    )
+    return _lama_session
+
+
+def _make_sparkle_mask(size: int, center: tuple[int, int]) -> "np.ndarray":
+    """Create a 4-point star mask matching Gemini's sparkle watermark.
+
+    Uses PIL to draw two rotated ellipses + circle, then dilates
+    with a simple box filter to cover semi-transparent edges.
+    Returns a numpy uint8 array (0 or 255).
+    """
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    mask_img = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask_img)
+    cx, cy = center
+
+    # Vertical ellipse (narrow width, tall height)
+    draw.ellipse((cx - 6, cy - 28, cx + 6, cy + 28), fill=255)
+    # Horizontal ellipse (wide, narrow height)
+    draw.ellipse((cx - 28, cy - 6, cx + 28, cy + 6), fill=255)
+    # Center circle to fill the intersection smoothly
+    draw.circle(center, 10, fill=255)
+
+    # Dilate: expand mask by ~7px to cover semi-transparent halo
+    mask_arr = np.array(mask_img)
+    from PIL import ImageFilter
+    dilated = mask_img.filter(ImageFilter.MaxFilter(15))
+    return np.array(dilated)
+
+
+def _remove_watermark(image_path: str) -> bool:
+    """Remove Gemini sparkle watermark from bottom-right corner using LaMa.
+
+    The watermark is always at a fixed position: center at (w-57, h-57).
+    Returns True if removed, False if onnxruntime is not available.
+    """
+    session = _get_lama_session()
+    if session is None:
+        return False
+
+    import numpy as np
+    from PIL import Image
+
+    img = Image.open(image_path)
+    w, h = img.size
+    if w < 512 or h < 512:
+        return False
+
+    # --- Crop 512x512 from bottom-right for LaMa ---
+    crop_x0 = w - 512
+    crop_y0 = h - 512
+    crop = img.crop((crop_x0, crop_y0, w, h))
+
+    # Watermark center within the 512x512 crop
+    local_cx = 512 - _WM_OFFSET  # = 455
+    local_cy = 512 - _WM_OFFSET  # = 455
+
+    # --- Build mask ---
+    mask_arr = _make_sparkle_mask(512, (local_cx, local_cy))
+
+    # --- LaMa inference ---
+    crop_rgb = np.array(crop).astype(np.float32) / 255.0       # (512,512,3)
+    img_input = crop_rgb.transpose(2, 0, 1)[None]               # (1,3,512,512)
+    mask_input = (mask_arr.astype(np.float32) / 255.0)[None, None]  # (1,1,512,512)
+
+    output = session.run(None, {"image": img_input, "mask": mask_input})[0]
+    # LaMa output is already in 0-255 range (not 0-1)
+    result = output[0].transpose(1, 2, 0).clip(0, 255).astype(np.uint8)
+
+    # --- Paste back only masked pixels ---
+    result_img = Image.fromarray(result)
+    mask_pil = Image.fromarray(mask_arr)
+    crop.paste(result_img, mask=mask_pil)
+    img.paste(crop, (crop_x0, crop_y0))
+
+    img.save(image_path)
+    return True
+
 
 # ---------------------------------------------------------------------------
 # Cookie resolution: env vars → browser-cookie3 → error
@@ -374,12 +486,17 @@ async def gemini_generate_image(
         saved = []
 
         for i, image in enumerate(response.images):
-            # Strip any URL suffix and use =s0 for full-resolution download.
+            # Strip any URL suffix and use =s0 for full-resolution PNG download.
             image.url = re.sub(r"=[^/]*$", "", image.url)
             image.url += "=s0"
             filepath = await image.save(
                 path=str(IMAGES_DIR), verbose=False, full_size=False,
             )
+            try:
+                if _remove_watermark(filepath):
+                    logger.info("Watermark removed from %s", filepath)
+            except Exception as wm_err:
+                logger.warning("Watermark removal failed: %s", wm_err)
             title = getattr(image, "title", None) or f"image_{i}"
             saved.append({"title": title, "path": filepath, "dir": str(IMAGES_DIR)})
 
