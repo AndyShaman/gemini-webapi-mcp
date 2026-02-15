@@ -6,6 +6,7 @@ without requiring paid API keys. Authentication is done through
 browser cookies (__Secure-1PSID and __Secure-1PSIDTS).
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -138,6 +139,7 @@ def _get_sessions(ctx: Context) -> dict:
 
 
 _image_mode = False
+_image_lock = asyncio.Lock()
 
 
 def _patch_client(gemini_client):
@@ -355,14 +357,15 @@ async def gemini_generate_image(
                     return f"Error: File not found — {p}"
                 resolved_files.append(str(p))
 
-        _image_mode = True
-        try:
-            kwargs = {"model": model or "gemini-3.0-pro"}
-            if resolved_files:
-                kwargs["files"] = resolved_files
-            response = await client.generate_content(prompt, **kwargs)
-        finally:
-            _image_mode = False
+        async with _image_lock:
+            _image_mode = True
+            try:
+                kwargs = {"model": model or "gemini-3.0-pro"}
+                if resolved_files:
+                    kwargs["files"] = resolved_files
+                response = await client.generate_content(prompt, **kwargs)
+            finally:
+                _image_mode = False
 
         if not response.images:
             return response.text or "No images were generated. Try rephrasing your prompt."

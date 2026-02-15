@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gemini-webapi-mcp</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        .hero {
+            text-align: center;
+            padding: 60px 20px 40px;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .hero h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        .hero p {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+        .badge:hover { transform: translateY(-2px); }
+        .badge-free { background: #065f46; color: #6ee7b7; }
+        .badge-mcp { background: #1e3a5f; color: #7dd3fc; }
+        .badge-mit { background: #3b0764; color: #c4b5fd; }
+
+        .features {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .features h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+            color: #f1f5f9;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #334155;
+            transition: border-color 0.3s, transform 0.3s;
+        }
+        .card:hover {
+            border-color: #38bdf8;
+            transform: translateY(-4px);
+        }
+        .card img {
+            width: 100%;
+            height: 220px;
+            object-fit: contain;
+            background: #f0f4f8;
+            padding: 12px;
+        }
+        .card-body {
+            padding: 24px;
+        }
+        .card-body h3 {
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+            color: #38bdf8;
+        }
+        .card-body p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+        .card-body code {
+            display: block;
+            margin-top: 12px;
+            padding: 10px 14px;
+            background: #0f172a;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: #7dd3fc;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .tools {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .tools h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 24px;
+            color: #f1f5f9;
+        }
+        .tool-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        .tool-icon {
+            font-size: 1.5rem;
+            width: 40px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .tool-name {
+            font-weight: 600;
+            color: #38bdf8;
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+        .tool-desc {
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: #475569;
+            font-size: 0.85rem;
+        }
+        footer a {
+            color: #38bdf8;
+            text-decoration: none;
+        }
+        footer a:hover { text-decoration: underline; }
+
+        .social {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 16px;
+        }
+        .social a {
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+        .social a:hover { opacity: 0.85; }
+        .social .tg { background: #0088cc; color: #fff; }
+        .social .yt { background: #ff0000; color: #fff; }
+    </style>
+</head>
+<body>
+
+<section class="hero">
+    <h1>gemini-webapi-mcp</h1>
+    <p>MCP-сервер для Google Gemini &mdash; генерация изображений, чат и анализ файлов через браузерные cookies. Без API-ключей.</p>
+    <div class="badges">
+        <span class="badge badge-free">Free</span>
+        <span class="badge badge-mcp">MCP Protocol</span>
+        <span class="badge badge-mit">MIT License</span>
+    </div>
+</section>
+
+<section class="features">
+    <h2>Возможности</h2>
+    <div class="cards">
+
+        <div class="card">
+            <img src="images/diagram-image-gen.png" alt="Image Generation Diagram">
+            <div class="card-body">
+                <h3>Генерация и редактирование изображений</h3>
+                <p>Создавайте изображения по описанию или редактируйте существующие. Pro-модель поддерживает произвольные пропорции.</p>
+                <code>gemini_generate_image {"prompt": "кот в акварели"}</code>
+            </div>
+        </div>
+
+        <div class="card">
+            <img src="images/diagram-file-analysis.png" alt="File Analysis Diagram">
+            <div class="card-body">
+                <h3>Анализ файлов</h3>
+                <p>Загружайте видео, изображения, PDF и документы &mdash; Gemini проанализирует содержимое и ответит на вопросы.</p>
+                <code>gemini_upload_file {"file_path": "video.mp4"}</code>
+            </div>
+        </div>
+
+        <div class="card">
+            <img src="images/diagram-chat.png" alt="Chat Diagram">
+            <div class="card-body">
+                <h3>Чат и режим рассуждений</h3>
+                <p>Текстовый чат с поддержкой multi-turn сессий. Flash-Thinking показывает процесс размышлений модели.</p>
+                <code>gemini_chat {"prompt": "Объясни квантовые вычисления"}</code>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+<section class="tools">
+    <h2>Инструменты</h2>
+    <div class="tool-list">
+        <div class="tool-item">
+            <div class="tool-icon">🎨</div>
+            <div>
+                <div class="tool-name">gemini_generate_image</div>
+                <div class="tool-desc">Генерация новых или редактирование существующих изображений</div>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-icon">📄</div>
+            <div>
+                <div class="tool-name">gemini_upload_file</div>
+                <div class="tool-desc">Анализ файлов: видео, изображения, PDF, документы</div>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-icon">💬</div>
+            <div>
+                <div class="tool-name">gemini_chat</div>
+                <div class="tool-desc">Текстовый чат (одиночный или multi-turn)</div>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-icon">🔄</div>
+            <div>
+                <div class="tool-name">gemini_start_chat</div>
+                <div class="tool-desc">Начать multi-turn сессию с сохранением контекста</div>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-icon">🔑</div>
+            <div>
+                <div class="tool-name">gemini_reset</div>
+                <div class="tool-desc">Переинициализация клиента при ошибках авторизации</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <p>MIT &mdash; <a href="https://github.com/AndyShaman/gemini-webapi-mcp">GitHub</a></p>
+    <div class="social">
+        <a href="https://t.me/AI_Handler" class="tg">Telegram</a>
+        <a href="https://www.youtube.com/channel/UCLkP6wuW_P2hnagdaZMBtCw" class="yt">YouTube</a>
+    </div>
+</footer>
+
+</body>
+</html>
