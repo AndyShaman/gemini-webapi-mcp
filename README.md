@@ -74,9 +74,9 @@ uv run gemini-webapi-mcp
 }
 ```
 
-### 4. Установите скилл (опционально)
+### 4. Установите скилл для Claude Code (опционально)
 
-Скопируйте папку `skill/` в директорию скиллов Claude Code:
+Папка [`skill/`](skill/) содержит скилл для Claude Code — подсказки по промптингу, документацию по тулам и гайд по генерации изображений. Скилл автоматически активируется при работе с Gemini.
 
 ```bash
 cp -r skill ~/.claude/skills/gemini-mcp
@@ -242,9 +242,9 @@ Add to `~/.config/mcp/mcp_servers.json`:
 }
 ```
 
-### 4. Install the skill (optional)
+### 4. Install the skill for Claude Code (optional)
 
-Copy the `skill/` folder to Claude Code skills directory:
+The [`skill/`](skill/) folder contains a Claude Code skill — prompting tips, tool documentation and an image generation guide. The skill auto-activates when working with Gemini.
 
 ```bash
 cp -r skill ~/.claude/skills/gemini-mcp
