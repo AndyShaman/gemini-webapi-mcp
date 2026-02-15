@@ -41,16 +41,23 @@ mcp-cli call gemini gemini_start_chat '{"model": "gemini-3.0-pro"}'
 
 ## gemini_generate_image
 
-Generate images from text. Watermark auto-removed if onnxruntime installed.
+Generate new images or edit existing ones. Watermark auto-removed if `onnxruntime` installed.
 
 **Parameters:**
 | Param | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `prompt` | yes | — | Image description |
+| `prompt` | yes | — | Image description or editing instruction |
+| `files` | no | — | List of file paths for image editing |
 | `model` | no | `gemini-3.0-pro` | Model (Pro supports aspect ratios) |
 
+**Generate:**
 ```
 mcp-cli call gemini gemini_generate_image '{"prompt": "a serene mountain lake at sunset, oil painting style"}'
+```
+
+**Edit existing image:**
+```
+mcp-cli call gemini gemini_generate_image '{"prompt": "make the sky purple", "files": ["/path/to/image.png"]}'
 ```
 
 **Output:** PNG saved to `~/Pictures/gemini/`, full native resolution.
@@ -64,24 +71,20 @@ mcp-cli call gemini gemini_generate_image '{"prompt": "a serene mountain lake at
 
 ## gemini_upload_file
 
-Upload file and ask Gemini about it. Also used for image editing.
+Upload file and ask Gemini about it. Supports video, images, PDF, documents.
 
 **Parameters:**
 | Param | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `file_path` | yes | — | Absolute path to file |
-| `prompt` | yes | — | Question or instruction |
+| `prompt` | no | `"Describe this file."` | Question or instruction |
 | `model` | no | `gemini-3.0-flash` | Model to use |
 
-**Analysis:**
 ```
 mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/image.png", "prompt": "What is in this image?"}'
 ```
 
-**Image editing** (use `gemini-3.0-pro` for output with images):
-```
-mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/photo.png", "prompt": "Change the background to a sunset beach", "model": "gemini-3.0-pro"}'
-```
+> For **image editing**, use `gemini_generate_image` with the `files` parameter instead.
 
 ## gemini_analyze_url
 
@@ -91,7 +94,7 @@ Analyze URL — YouTube videos, webpages, articles.
 | Param | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `url` | yes | — | URL to analyze |
-| `prompt` | yes | — | Question about the content |
+| `prompt` | no | `"Summarize this content."` | Question about the content |
 | `model` | no | `gemini-3.0-flash` | Model to use |
 
 ```

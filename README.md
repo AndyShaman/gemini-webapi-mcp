@@ -19,6 +19,7 @@
 - **Редактирование изображений** — отправьте картинку + промпт и получите изменённую версию
 - **Анализ файлов** — видео, изображения, PDF, документы
 - **Текстовый чат** с Gemini (Flash, Pro, Flash-Thinking)
+- **Авто-удаление вотермарки** — нейросеть LaMa убирает sparkle-метку Gemini локально
 - **Авто-аутентификация** через cookies из Chrome
 
 ## Быстрый старт
@@ -32,7 +33,7 @@
 **Из GitHub (без клонирования):**
 
 ```bash
-uv run --with "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
+uv run --with "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
 ```
 
 **Локальная установка:**
@@ -55,11 +56,13 @@ uv run gemini-webapi-mcp
   "mcpServers": {
     "gemini": {
       "command": "uv",
-      "args": ["run", "--with", "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"]
+      "args": ["run", "--with", "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"]
     }
   }
 }
 ```
+
+> Без удаления вотермарки: замените `gemini-webapi-mcp[watermark]` на `gemini-webapi-mcp`.
 
 **Локально (после клонирования):**
 
@@ -107,7 +110,7 @@ mcp-cli call gemini gemini_chat '{"prompt": "Привет!"}'
   "mcpServers": {
     "gemini": {
       "command": "uv",
-      "args": ["run", "--with", "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"],
+      "args": ["run", "--with", "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"],
       "env": {
         "GEMINI_PSID": "your__Secure-1PSID_value",
         "GEMINI_PSIDTS": "your__Secure-1PSIDTS_value"
@@ -116,6 +119,22 @@ mcp-cli call gemini gemini_chat '{"prompt": "Привет!"}'
   }
 }
 ```
+
+## Удаление вотермарки
+
+Gemini добавляет sparkle-метку (четырёхконечную звёздочку) в правый нижний угол сгенерированных изображений. Сервер автоматически удаляет её с помощью нейросети [LaMa](https://github.com/advimman/lama).
+
+**Установка:**
+
+```bash
+# Из GitHub — с поддержкой удаления вотермарки
+uv run --with "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
+
+# Или отдельно, если уже установлен
+pip install onnxruntime
+```
+
+При первом запуске модель LaMa (208 МБ) автоматически скачивается и кэшируется в `~/.cache/gemini-mcp/`. Если `onnxruntime` не установлен — сервер работает нормально, просто не удаляет вотермарку.
 
 ## Инструменты
 
@@ -187,6 +206,7 @@ MIT — свободно используйте, модифицируйте и �
 - **Image editing** — send an image + prompt to get a modified version
 - **File analysis** — video, images, PDF, documents
 - **Text chat** with Gemini (Flash, Pro, Flash-Thinking)
+- **Auto watermark removal** — LaMa neural network removes Gemini's sparkle mark locally
 - **Auto-authentication** via Chrome browser cookies
 
 ## Quick Start
@@ -200,7 +220,7 @@ Open Chrome, go to [gemini.google.com](https://gemini.google.com) and sign in.
 **From GitHub (no clone needed):**
 
 ```bash
-uv run --with "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
+uv run --with "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
 ```
 
 **Local install:**
@@ -223,11 +243,13 @@ Add to `~/.config/mcp/mcp_servers.json`:
   "mcpServers": {
     "gemini": {
       "command": "uv",
-      "args": ["run", "--with", "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"]
+      "args": ["run", "--with", "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"]
     }
   }
 }
 ```
+
+> Without watermark removal: replace `gemini-webapi-mcp[watermark]` with `gemini-webapi-mcp`.
 
 **Local (after cloning):**
 
@@ -273,7 +295,7 @@ If auto-detection fails or you have multiple accounts, set cookies manually:
   "mcpServers": {
     "gemini": {
       "command": "uv",
-      "args": ["run", "--with", "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"],
+      "args": ["run", "--with", "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git", "gemini-webapi-mcp"],
       "env": {
         "GEMINI_PSID": "your__Secure-1PSID_value",
         "GEMINI_PSIDTS": "your__Secure-1PSIDTS_value"
@@ -282,6 +304,22 @@ If auto-detection fails or you have multiple accounts, set cookies manually:
   }
 }
 ```
+
+## Watermark Removal
+
+Gemini adds a sparkle watermark (4-point star) to the bottom-right corner of generated images. The server automatically removes it using the [LaMa](https://github.com/advimman/lama) neural network.
+
+**Install:**
+
+```bash
+# From GitHub — with watermark removal support
+uv run --with "gemini-webapi-mcp[watermark] @ git+https://github.com/AndyShaman/gemini-webapi-mcp.git" gemini-webapi-mcp
+
+# Or separately, if already installed
+pip install onnxruntime
+```
+
+On first run, the LaMa model (208 MB) is automatically downloaded and cached in `~/.cache/gemini-mcp/`. If `onnxruntime` is not installed, the server works normally — it just doesn't remove the watermark.
 
 ## Tools
 

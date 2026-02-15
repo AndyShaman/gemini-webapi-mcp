@@ -26,9 +26,9 @@ mcp-cli call gemini gemini_chat '{"prompt": "Explain quantum computing"}'
 mcp-cli call gemini gemini_generate_image '{"prompt": "A cinematic wide shot of a futuristic city at sunset, volumetric fog, neon reflections on wet streets"}'
 ```
 
-**Edit image** (upload + instruction):
+**Edit image:**
 ```
-mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/image.png", "prompt": "Change the background to a sunset beach. Keep everything else exactly the same.", "model": "gemini-3.0-pro"}'
+mcp-cli call gemini gemini_generate_image '{"prompt": "Change the background to a sunset beach. Keep everything else exactly the same.", "files": ["/path/to/image.png"]}'
 ```
 
 **Analyze file:**

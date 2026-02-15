@@ -36,13 +36,13 @@ Text to render goes in quotes with styling:
 
 ### 5. Edit, Don't Re-roll
 
-Image 80% correct? Upload it back via `gemini_upload_file` with specific change:
+Image 80% correct? Edit it via `gemini_generate_image` with the `files` parameter:
 - "Change the lighting to sunset"
 - "Make the text neon blue"
 - "Remove the person on the left, fill with background"
 
 ```
-mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/image.png", "prompt": "Change the sky to dramatic sunset colors. Keep everything else exactly the same.", "model": "gemini-3.0-pro"}'
+mcp-cli call gemini gemini_generate_image '{"prompt": "Change the sky to dramatic sunset colors. Keep everything else exactly the same.", "files": ["/path/to/image.png"]}'
 ```
 
 ## Prompt Template
@@ -100,7 +100,7 @@ Only Pro model respects aspect ratio. Include naturally in prompt.
 
 ## Reference Images
 
-Upload images via `gemini_upload_file` with `model: gemini-3.0-pro` for visual output.
+Upload images via `gemini_generate_image` with the `files` parameter for editing.
 
 **Match existing style:**
 ```
