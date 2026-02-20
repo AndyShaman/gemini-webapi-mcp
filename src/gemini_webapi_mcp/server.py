@@ -42,7 +42,7 @@ _BROWSER_PARAMS = {
     6: [1],
     10: 1,
     11: 0,
-    17: [[2]],
+    17: [[0]],
     18: 0,
     27: 1,
     30: [4],
@@ -657,7 +657,13 @@ async def gemini_generate_image(
             if isinstance(image, _GenImg):
                 save_kwargs["full_size"] = False
             filepath = await image.save(**save_kwargs)
-            wm_scale = 2 if i in download_urls else 1
+            # Detect 2x by actual file size, not by URL source
+            # (c8o8Fe may return a URL that still serves 1x for Flash)
+            from PIL import Image as _PILImage
+            _saved_img = _PILImage.open(filepath)
+            _sw, _sh = _saved_img.size
+            _saved_img.close()
+            wm_scale = 2 if max(_sw, _sh) > 1500 else 1
             try:
                 if _remove_watermark(filepath, scale=wm_scale):
                     logger.info("Watermark removed from %s", filepath)
