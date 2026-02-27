@@ -253,9 +253,33 @@ _last_metadata: list = []             # [cid, rid, rcid, ...] from last response
 def _patch_client(gemini_client):
     """Patch GeminiClient for image generation and 2x download support.
 
-    1. Add browser headers during image generation (_image_mode).
-    2. Intercept response parsing to capture image download tokens for c8o8Fe RPC.
+    1. Override model ID in header (Google rotates IDs periodically).
+    2. Add browser-compatible body params and extra headers during image generation.
+    3. Intercept response parsing to capture image download tokens for c8o8Fe RPC.
     """
+    # Google rotates model IDs periodically. Update these when generation fails (error 1052).
+    _MODEL_ID_MAP = {
+        "5bf011840784117a": "e051ce1aa80aa576",  # flash-thinking (Nano Banana 2)
+        "9d8ca3786ebdfbea": "e051ce1aa80aa576",  # pro -> same current ID
+        "fbb127bbb056c959": "e051ce1aa80aa576",  # flash -> same current ID
+    }
+
+    # Browser-compatible body params (indices in inner_req_list).
+    # Without these, certain operations (image editing with files) may fail.
+    _BROWSER_PARAMS = {
+        1: [os.environ.get("GEMINI_LANGUAGE", "ru")],
+        6: [1],
+        10: 1,
+        11: 0,
+        17: [[0]],
+        18: 0,
+        27: 1,
+        30: [4],
+        41: [1],
+        53: 0,
+        68: 2,
+    }
+
     http = gemini_client.client  # curl_cffi.AsyncSession
     _orig_request = http.request
 
@@ -264,6 +288,18 @@ def _patch_client(gemini_client):
         if method == "POST" and "StreamGenerate" in str(url) and _image_mode:
             headers = kwargs.get("headers") or {}
 
+            # Remap model ID in the model header
+            model_hdr = headers.get("x-goog-ext-525001261-jspb", "")
+            if model_hdr:
+                for old_id, new_id in _MODEL_ID_MAP.items():
+                    if old_id in model_hdr:
+                        model_hdr = model_hdr.replace(old_id, new_id)
+                        break
+                # Update trailing version flag: ,1] -> ,2]
+                if model_hdr.endswith(",1]"):
+                    model_hdr = model_hdr[:-2] + "2]"
+                headers["x-goog-ext-525001261-jspb"] = model_hdr
+
             headers["x-goog-ext-73010989-jspb"] = "[0]"
             headers["x-goog-ext-73010990-jspb"] = "[0]"
             headers["x-goog-ext-525005358-jspb"] = json.dumps(
@@ -271,6 +307,41 @@ def _patch_client(gemini_client):
             )
 
             kwargs["headers"] = headers
+
+            # Inject browser-compatible body params into f.req
+            data = kwargs.get("data")
+            if isinstance(data, dict) and "f.req" in data:
+                try:
+                    outer = json.loads(data["f.req"])
+                    inner = json.loads(outer[1])
+                    for idx, val in _BROWSER_PARAMS.items():
+                        if inner[idx] is None:
+                            inner[idx] = val
+
+                    # Fix file_data format:
+                    # Library:  [[[url], "name"]]
+                    # Browser:  [[[url, 1, null, "mime"], "name", null*6, [0]]]
+                    file_data = inner[0][3] if isinstance(inner[0], list) and len(inner[0]) > 3 else None
+                    if file_data and isinstance(file_data, list):
+                        _MIME_MAP = {
+                            ".png": "image/png", ".jpg": "image/jpeg",
+                            ".jpeg": "image/jpeg", ".webp": "image/webp",
+                            ".gif": "image/gif", ".bmp": "image/bmp",
+                        }
+                        for fd in file_data:
+                            if isinstance(fd, list) and len(fd) == 2:
+                                url_arr, filename = fd[0], fd[1]
+                                if isinstance(url_arr, list) and len(url_arr) == 1:
+                                    ext = Path(filename).suffix.lower() if isinstance(filename, str) else ""
+                                    mime = _MIME_MAP.get(ext, "image/png")
+                                    fd[0] = [url_arr[0], 1, None, mime]
+                                    fd.extend([None, None, None, None, None, None, [0]])
+
+                    outer[1] = json.dumps(inner)
+                    data["f.req"] = json.dumps(outer)
+                    kwargs["data"] = data
+                except Exception:
+                    pass
 
         return await _orig_request(method, url, **kwargs)
 
