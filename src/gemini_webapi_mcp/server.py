@@ -220,7 +220,7 @@ async def app_lifespan(server):
     psid, psidts = _resolve_cookies()
 
     client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None)
-    await client.init(timeout=120, auto_close=False, auto_refresh=True)
+    await client.init(timeout=600, watchdog_timeout=120, auto_close=False, auto_refresh=True)
     _patch_client(client)
 
     yield {"gemini_client": client, "chat_sessions": {}}

@@ -1,6 +1,6 @@
 # Image Prompting Guide
 
-Gemini Pro — "thinking" model. Understands intent, physics, composition. Prompt naturally.
+Gemini image model understands intent, physics, composition. Prompt naturally.
 
 ## Core Rules
 
@@ -42,7 +42,7 @@ Image 80% correct? Edit it via `gemini_generate_image` with the `files` paramete
 - "Remove the person on the left, fill with background"
 
 ```
-mcp-cli call gemini gemini_generate_image '{"prompt": "Change the sky to dramatic sunset colors. Keep everything else exactly the same.", "files": ["/path/to/image.png"]}'
+gemini_generate_image(prompt="Change the sky to dramatic sunset colors. Keep everything else exactly the same.", files=["/path/to/image.png"])
 ```
 
 ## Prompt Template
@@ -67,7 +67,7 @@ Format: [ASPECT RATIO]
 
 ## Aspect Ratios
 
-Only Pro model respects aspect ratio. Include naturally in prompt.
+Include aspect ratio naturally in prompt. Do NOT specify model — the server picks the best image model automatically.
 
 | Ratio | Use | Prompt hint |
 |-------|-----|-------------|
@@ -161,5 +161,5 @@ For scenes with 5+ detailed elements, use JSON in prompt:
 - External refs: "like Apple design" or "in style of [artist]"
 - Vague colors: "dark green" -> use hex #228b22
 - Re-rolling when 80% correct -> edit via upload instead
-- Expecting 4K: native resolution is 1024-1376px
-- Aspect ratio with Flash: always 1024x1024, use Pro
+- Expecting 4K: native resolution is 1024-1376px, 2x upscale to ~2800px
+- Specifying model explicitly: let the server pick the best image model

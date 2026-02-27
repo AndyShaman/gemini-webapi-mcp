@@ -12,17 +12,17 @@ Text prompt to Gemini. Supports multi-turn and thinking mode.
 | `session_id` | no | — | Session ID for multi-turn |
 
 ```
-mcp-cli call gemini gemini_chat '{"prompt": "Explain quantum computing"}'
+gemini_chat(prompt="Explain quantum computing")
 ```
 
 Multi-turn:
 ```
-mcp-cli call gemini gemini_chat '{"prompt": "Now simpler", "session_id": "abc123"}'
+gemini_chat(prompt="Now simpler", session_id="abc123")
 ```
 
 Thinking mode (shows reasoning):
 ```
-mcp-cli call gemini gemini_chat '{"prompt": "Solve step by step: ...", "model": "gemini-3.0-flash-thinking"}'
+gemini_chat(prompt="Solve step by step: ...", model="gemini-3.0-flash-thinking")
 ```
 
 ## gemini_start_chat
@@ -35,8 +35,8 @@ Start multi-turn session. Returns `session_id` for use in `gemini_chat`.
 | `model` | no | `gemini-3.0-flash` | Model for session |
 
 ```
-mcp-cli call gemini gemini_start_chat '{}'
-mcp-cli call gemini gemini_start_chat '{"model": "gemini-3.0-pro"}'
+gemini_start_chat()
+gemini_start_chat(model="gemini-3.0-pro")
 ```
 
 ## gemini_generate_image
@@ -48,28 +48,27 @@ Generate new images or edit existing ones. Watermark auto-removed if `onnxruntim
 |-------|----------|---------|-------------|
 | `prompt` | yes | — | Image description or editing instruction |
 | `files` | no | — | List of file paths for image editing |
-| `model` | no | `gemini-3.0-pro` | Model (Pro supports aspect ratios) |
+| `model` | no | `gemini-3.0-flash-thinking` | Image model (Nano Banana 2, supports aspect ratios) |
 
 **Generate:**
 ```
-mcp-cli call gemini gemini_generate_image '{"prompt": "a serene mountain lake at sunset, oil painting style"}'
+gemini_generate_image(prompt="a serene mountain lake at sunset, oil painting style")
 ```
 
 **Edit existing image:**
 ```
-mcp-cli call gemini gemini_generate_image '{"prompt": "make the sky purple", "files": ["/path/to/image.png"]}'
+gemini_generate_image(prompt="make the sky purple", files=["/path/to/image.png"])
 ```
 
 **Output:** PNG saved to `~/Pictures/gemini/`, 2x upscaled resolution. Watermark auto-removed.
 
 **Resolution (2x upscale):**
-- Pro 16:9: 2816x1536 (native 1408x768, auto-upscaled 2x)
-- Pro 9:16: 1536x2816 (native 768x1408, auto-upscaled 2x)
-- Pro 1:1: 2048x2048 (native 1024x1024, auto-upscaled 2x)
-- Flash: 2048x2048 (native 1024x1024, auto-upscaled 2x)
+- 16:9: 2816x1536 (native 1408x768, auto-upscaled 2x)
+- 9:16: 1536x2816 (native 768x1408, auto-upscaled 2x)
+- 1:1: 2048x2048 (native 1024x1024, auto-upscaled 2x)
 - Fallback to native if 2x unavailable
 
-**Aspect ratio:** Include in prompt naturally: "wide landscape 16:9", "tall portrait 9:16". Only Pro respects this — Flash always square.
+**Aspect ratio:** Include in prompt naturally: "wide landscape 16:9", "tall portrait 9:16". Do NOT specify model explicitly — the server picks the best image model automatically.
 
 ## gemini_upload_file
 
@@ -83,7 +82,7 @@ Upload file and ask Gemini about it. Supports video, images, PDF, documents.
 | `model` | no | `gemini-3.0-flash` | Model to use |
 
 ```
-mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/image.png", "prompt": "What is in this image?"}'
+gemini_upload_file(file_path="/path/to/image.png", prompt="What is in this image?")
 ```
 
 > For **image editing**, use `gemini_generate_image` with the `files` parameter instead.
@@ -100,7 +99,7 @@ Analyze URL — YouTube videos, webpages, articles.
 | `model` | no | `gemini-3.0-flash` | Model to use |
 
 ```
-mcp-cli call gemini gemini_analyze_url '{"url": "https://youtube.com/watch?v=...", "prompt": "Summarize this video"}'
+gemini_analyze_url(url="https://youtube.com/watch?v=...", prompt="Summarize this video")
 ```
 
 ## gemini_reset
@@ -108,7 +107,7 @@ mcp-cli call gemini gemini_analyze_url '{"url": "https://youtube.com/watch?v=...
 Re-initialize client when cookies expire. No parameters.
 
 ```
-mcp-cli call gemini gemini_reset '{}'
+gemini_reset()
 ```
 
 **When to use:** Auth errors, 401/403 responses, "cookie expired" messages.
@@ -118,14 +117,14 @@ mcp-cli call gemini gemini_reset '{}'
 | Model | Best for | Notes |
 |-------|----------|-------|
 | `gemini-3.0-flash` | Text chat, analysis | Fast, default for chat |
-| `gemini-3.0-pro` | Image generation, editing | Supports aspect ratios, default for images |
-| `gemini-3.0-flash-thinking` | Complex reasoning | Shows thought process |
+| `gemini-3.0-flash-thinking` | Image generation, editing | Nano Banana 2, supports aspect ratios, default for images |
+| `gemini-3.0-pro` | Complex reasoning | Slower, higher quality text |
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | Auth error / cookies expired | `gemini_reset` |
-| Image generation error 1052 | Model IDs rotated by Google, need update in server.py `_MODEL_ID_MAP` |
+| Stream interrupted / timeout | Server auto-retries; for heavy prompts with files, wait up to 5 min |
 | No images in response | Prompt may violate content policy, rephrase |
-| Square image despite aspect ratio | Using Flash instead of Pro, or aspect ratio not in prompt |
+| Square image despite aspect ratio | Include "16:9" or "9:16" in prompt text |
