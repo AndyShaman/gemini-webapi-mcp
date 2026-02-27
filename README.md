@@ -22,8 +22,8 @@
 
 ## Возможности
 
-- **Генерация изображений** по текстовому описанию (модель Pro с поддержкой пропорций)
-- **2x разрешение** — автоматически скачивает upscaled-версию (2816x1536 вместо 1408x768)
+- **Генерация изображений** по текстовому описанию (Nano Banana 2 с поддержкой пропорций)
+- **2x разрешение** — автоматически скачивает upscaled-версию (2048x2048 → 2816x1536 и выше)
 - **Редактирование изображений** — отправьте картинку + промпт и получите изменённую версию
 - **Анализ файлов** — видео, изображения, PDF, документы
 - **Текстовый чат** с Gemini (Flash, Pro, Flash-Thinking)
@@ -142,10 +142,9 @@ mcp-cli call gemini gemini_chat '{"prompt": "Привет!"}'
 
 | Модель | Нативное | 2x (скачивается) |
 |--------|----------|------------------|
-| Pro (16:9) | 1408x768 | 2816x1536 |
-| Pro (9:16) | 768x1408 | 1536x2816 |
-| Pro (1:1) | 1024x1024 | 2048x2048 |
-| Flash | 1024x1024 | 2048x2048 |
+| Flash-Thinking (16:9) | 1408x768 | 2816x1536 |
+| Flash-Thinking (9:16) | 768x1376 | 1536x2752 |
+| Flash-Thinking (1:1) | 1024x1024 | 2048x2048 |
 
 Если 2x-версия недоступна (таймаут, ошибка сети), сервер автоматически использует нативное разрешение.
 
@@ -181,8 +180,8 @@ pip install onnxruntime
 | Модель | По умолчанию для | Примечание |
 |--------|------------------|------------|
 | `gemini-3.0-flash` | чат, анализ файлов | Быстрая |
-| `gemini-3.0-pro` | генерация изображений | Поддержка пропорций |
-| `gemini-3.0-flash-thinking` | — | Показывает процесс рассуждения |
+| `gemini-3.0-flash-thinking` | генерация изображений | Nano Banana 2, поддержка пропорций |
+| `gemini-3.0-pro` | — | Альтернативная модель |
 
 ## Примеры использования
 
@@ -208,7 +207,7 @@ mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/video.mp4", "pro
 
 ## Благодарности
 
-Этот проект построен на основе библиотеки [gemini-webapi](https://github.com/HanaokaYuzu/Gemini-API) от [@HanaokaYuzu](https://github.com/HanaokaYuzu) — реверс-инжиниринговой асинхронной Python-обёртки для веб-приложения Google Gemini. Лицензия: AGPL-3.0.
+Этот проект построен на основе библиотеки [gemini-webapi](https://github.com/HanaokaYuzu/Gemini-API) от [@HanaokaYuzu](https://github.com/HanaokaYuzu) (форк [@xob0t](https://github.com/xob0t/Gemini-API) с поддержкой curl_cffi) — реверс-инжиниринговой асинхронной Python-обёртки для веб-приложения Google Gemini. Лицензия: AGPL-3.0.
 
 ## Лицензия
 
@@ -242,8 +241,8 @@ mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/video.mp4", "pro
 
 ## Features
 
-- **Image generation** from text descriptions (Pro model with aspect ratio support)
-- **2x resolution** — automatically downloads upscaled version (2816x1536 instead of 1408x768)
+- **Image generation** from text descriptions (Nano Banana 2 with aspect ratio support)
+- **2x resolution** — automatically downloads upscaled version (2048x2048 → 2816x1536 and above)
 - **Image editing** — send an image + prompt to get a modified version
 - **File analysis** — video, images, PDF, documents
 - **Text chat** with Gemini (Flash, Pro, Flash-Thinking)
@@ -360,10 +359,9 @@ The server automatically requests an upscaled version of each generated image �
 
 | Model | Native | 2x (downloaded) |
 |-------|--------|-----------------|
-| Pro (16:9) | 1408x768 | 2816x1536 |
-| Pro (9:16) | 768x1408 | 1536x2816 |
-| Pro (1:1) | 1024x1024 | 2048x2048 |
-| Flash | 1024x1024 | 2048x2048 |
+| Flash-Thinking (16:9) | 1408x768 | 2816x1536 |
+| Flash-Thinking (9:16) | 768x1376 | 1536x2752 |
+| Flash-Thinking (1:1) | 1024x1024 | 2048x2048 |
 
 If the 2x version is unavailable (timeout, network error), the server automatically falls back to native resolution.
 
@@ -399,8 +397,8 @@ On first run, the LaMa model (208 MB) is automatically downloaded and cached in 
 | Model | Default for | Notes |
 |-------|-------------|-------|
 | `gemini-3.0-flash` | chat, file analysis | Fast |
-| `gemini-3.0-pro` | image generation | Supports aspect ratios |
-| `gemini-3.0-flash-thinking` | — | Shows reasoning process |
+| `gemini-3.0-flash-thinking` | image generation | Nano Banana 2, supports aspect ratios |
+| `gemini-3.0-pro` | — | Alternative model |
 
 ## Usage Examples
 
@@ -426,7 +424,7 @@ mcp-cli call gemini gemini_upload_file '{"file_path": "/path/to/video.mp4", "pro
 
 ## Acknowledgements
 
-This project is built on top of [gemini-webapi](https://github.com/HanaokaYuzu/Gemini-API) by [@HanaokaYuzu](https://github.com/HanaokaYuzu) — a reverse-engineered async Python wrapper for the Google Gemini web app. Licensed under AGPL-3.0.
+This project is built on top of [gemini-webapi](https://github.com/HanaokaYuzu/Gemini-API) by [@HanaokaYuzu](https://github.com/HanaokaYuzu) (fork by [@xob0t](https://github.com/xob0t/Gemini-API) with curl_cffi support) — a reverse-engineered async Python wrapper for the Google Gemini web app. Licensed under AGPL-3.0.
 
 ## License
 
