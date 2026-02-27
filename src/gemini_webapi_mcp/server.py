@@ -219,7 +219,10 @@ async def app_lifespan(server):
 
     psid, psidts = _resolve_cookies()
 
-    client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None)
+    account_index = int(os.environ.get("GEMINI_ACCOUNT_INDEX", "0"))
+    client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index)
+    if account_index:
+        logger.info("Using Google account index: %d", account_index)
     await client.init(timeout=600, watchdog_timeout=120, auto_close=False, auto_refresh=True)
     _patch_client(client)
 
@@ -451,7 +454,7 @@ async def _fetch_download_url(client, token: str, prompt: str, metadata: list, i
         "rpcids": "c8o8Fe",
         "_reqid": client._reqid,
         "rt": "c",
-        "source-path": "/app",
+        "source-path": Endpoint.get_source_path(client.account_index),
     }
     client._reqid += 100000
     if client.build_label:
@@ -461,7 +464,7 @@ async def _fetch_download_url(client, token: str, prompt: str, metadata: list, i
 
     try:
         resp = await client.client.post(
-            Endpoint.BATCH_EXEC,
+            Endpoint.get_batch_exec_url(client.account_index),
             params=params,
             data={"at": client.access_token, "f.req": outer_payload},
             headers={

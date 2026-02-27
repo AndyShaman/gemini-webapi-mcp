@@ -105,9 +105,9 @@ mcp-cli call gemini gemini_chat '{"prompt": "Привет!"}'
 
 Сервер автоматически читает cookies из Chrome через `browser-cookie3`.
 
-> **Несколько Google-аккаунтов?** При авто-определении выбор аккаунта непредсказуем. Используйте env vars `GEMINI_PSID` / `GEMINI_PSIDTS` чтобы явно указать нужный аккаунт.
+> **Несколько Google-аккаунтов?** Установите `GEMINI_ACCOUNT_INDEX` — номер аккаунта из Chrome (0 = первый, 1 = второй, ...). Посмотрите порядок: кликните на аватарку в gemini.google.com.
 
-Если автоопределение не работает или у вас несколько аккаунтов, задайте cookies вручную:
+Если автоопределение cookies не работает, задайте их вручную:
 
 1. Откройте Chrome DevTools на gemini.google.com → Application → Cookies
 2. Скопируйте значения `__Secure-1PSID` и `__Secure-1PSIDTS`
@@ -135,6 +135,7 @@ mcp-cli call gemini gemini_chat '{"prompt": "Привет!"}'
 | `GEMINI_PSID` | Значение cookie `__Secure-1PSID` | авто из Chrome |
 | `GEMINI_PSIDTS` | Значение cookie `__Secure-1PSIDTS` | авто из Chrome |
 | `GEMINI_LANGUAGE` | Язык ответов Gemini (`ru`, `en`, `ja`, ...) | `en` |
+| `GEMINI_ACCOUNT_INDEX` | Индекс Google-аккаунта (0, 1, 2, ...) | `0` |
 
 ## Высокое разрешение (2x)
 
@@ -322,9 +323,9 @@ mcp-cli call gemini gemini_chat '{"prompt": "Hello!"}'
 
 The server reads cookies from Chrome automatically via `browser-cookie3`.
 
-> **Multiple Google accounts?** Auto-detection picks an unpredictable account. Use env vars `GEMINI_PSID` / `GEMINI_PSIDTS` to explicitly select the desired account.
+> **Multiple Google accounts?** Set `GEMINI_ACCOUNT_INDEX` — the account number from Chrome (0 = first, 1 = second, ...). Check the order by clicking your avatar on gemini.google.com.
 
-If auto-detection fails or you have multiple accounts, set cookies manually:
+If cookie auto-detection fails, set them manually:
 
 1. Open Chrome DevTools on gemini.google.com → Application → Cookies
 2. Copy `__Secure-1PSID` and `__Secure-1PSIDTS` values
@@ -352,6 +353,7 @@ If auto-detection fails or you have multiple accounts, set cookies manually:
 | `GEMINI_PSID` | Cookie value `__Secure-1PSID` | auto from Chrome |
 | `GEMINI_PSIDTS` | Cookie value `__Secure-1PSIDTS` | auto from Chrome |
 | `GEMINI_LANGUAGE` | Gemini response language (`ru`, `en`, `ja`, ...) | `en` |
+| `GEMINI_ACCOUNT_INDEX` | Google account index (0, 1, 2, ...) | `0` |
 
 ## High Resolution (2x)
 
