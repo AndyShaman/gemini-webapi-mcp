@@ -327,14 +327,14 @@ def _patch_client(gemini_client):
 
 
 def _handle_error(e: Exception) -> str:
-    from gemini_webapi import AuthError, APIError, TimeoutError as GeminiTimeout
+    from gemini_webapi import AuthError, APIError, RequestTimeoutError
 
     if isinstance(e, AuthError):
         return (
             "Error: Authentication failed. Cookies may have expired. "
             "Re-login to gemini.google.com in Chrome, then call gemini_reset."
         )
-    if isinstance(e, GeminiTimeout):
+    if isinstance(e, RequestTimeoutError):
         return "Error: Request timed out. Try again or use a lighter model."
     if isinstance(e, APIError):
         return f"Error: Gemini API error — {e}"
