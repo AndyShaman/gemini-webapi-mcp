@@ -267,7 +267,7 @@ def _patch_client(gemini_client):
     # Browser-compatible body params (indices in inner_req_list).
     # Without these, certain operations (image editing with files) may fail.
     _BROWSER_PARAMS = {
-        1: [os.environ.get("GEMINI_LANGUAGE", "ru")],
+        1: [os.environ.get("GEMINI_LANGUAGE", "en")],
         6: [1],
         10: 1,
         11: 0,
