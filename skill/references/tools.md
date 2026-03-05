@@ -128,3 +128,13 @@ gemini_reset()
 | Stream interrupted / timeout | Server auto-retries; for heavy prompts with files, wait up to 5 min |
 | No images in response | Prompt may violate content policy, rephrase |
 | Square image despite aspect ratio | Include "16:9" or "9:16" in prompt text |
+| Error 1052 / image generation fails | Google rotated model IDs. Update `_MODEL_ID_MAP` in `server.py` |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_PSID` | — | Override `__Secure-1PSID` cookie (instead of reading from Chrome) |
+| `GEMINI_PSIDTS` | — | Override `__Secure-1PSIDTS` cookie |
+| `GEMINI_ACCOUNT_INDEX` | `0` | Google account index (for multi-account Chrome profiles) |
+| `GEMINI_LANGUAGE` | `en` | Language for Gemini responses |
