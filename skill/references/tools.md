@@ -41,7 +41,7 @@ gemini_start_chat(model="gemini-3.0-pro")
 
 ## gemini_generate_image
 
-Generate new images or edit existing ones. Watermark auto-removed if `onnxruntime` installed.
+Generate new images or edit existing ones. Watermark auto-removed.
 
 **Parameters:**
 | Param | Required | Default | Description |

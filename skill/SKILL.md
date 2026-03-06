@@ -52,7 +52,7 @@ gemini_analyze_url(url="https://youtube.com/watch?v=...", prompt="Summarize this
 ## Key Facts
 
 - Images saved to `~/Pictures/gemini/` as PNG, 2x upscaled resolution
-- Watermark auto-removed if `onnxruntime` installed
+- Watermark auto-removed (built-in, no extra dependencies)
 - Include "16:9" or "9:16" in prompt for non-square aspect ratios
 - Do NOT specify model for image generation — server picks the best one automatically
 - Auth errors: call `gemini_reset` to refresh cookies
