@@ -128,7 +128,7 @@ gemini_reset()
 | Stream interrupted / timeout | Server auto-retries; for heavy prompts with files, wait up to 5 min |
 | No images in response | Prompt may violate content policy, rephrase |
 | Square image despite aspect ratio | Include "16:9" or "9:16" in prompt text |
-| Error 1052 / image generation fails | Google rotated model IDs. Update `_MODEL_ID_MAP` in `server.py` |
+| Error 1052 / image generation fails | Google rotated model IDs. Update server to latest version: `git pull && uv sync` |
 
 ## Environment Variables
 
@@ -138,3 +138,12 @@ gemini_reset()
 | `GEMINI_PSIDTS` | — | Override `__Secure-1PSIDTS` cookie |
 | `GEMINI_ACCOUNT_INDEX` | `0` | Google account index (for multi-account Chrome profiles) |
 | `GEMINI_LANGUAGE` | `en` | Language for Gemini responses |
+
+**Cookie auth on headless/remote servers:**
+
+By default, cookies are read automatically from a local Chrome browser via `browser-cookie3`. On headless servers (no Chrome), set `GEMINI_PSID` and `GEMINI_PSIDTS` manually:
+
+1. Open Chrome on any machine → go to `gemini.google.com` → sign in
+2. DevTools (F12) → Application → Cookies → `https://gemini.google.com`
+3. Copy values of `__Secure-1PSID` and `__Secure-1PSIDTS`
+4. Set as environment variables for the MCP server
