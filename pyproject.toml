@@ -34,9 +34,6 @@ dependencies = [
     "curl-cffi>=0.14.0",
 ]
 
-[project.optional-dependencies]
-watermark = ["onnxruntime>=1.17"]
-
 [project.scripts]
 gemini-webapi-mcp = "gemini_webapi_mcp:main"
 
