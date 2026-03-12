@@ -144,7 +144,8 @@ def _resolve_cookies() -> tuple[str, str]:
     try:
         import browser_cookie3
 
-        cj = browser_cookie3.chrome(domain_name=".google.com")
+        cookie_file = os.environ.get("CHROME_COOKIE_FILE") or None
+        cj = browser_cookie3.chrome(domain_name=".google.com", cookie_file=cookie_file)
         for cookie in cj:
             if cookie.name == "__Secure-1PSID" and cookie.value:
                 psid = cookie.value
@@ -454,6 +455,7 @@ async def _fetch_download_url(client, token: str, prompt: str, metadata: list, i
                     inner = _json.loads(inner_str)
                     if isinstance(inner, list) and inner:
                         return inner[0]
+        logger.warning("c8o8Fe: no download URL in response (%d parts parsed)", len(parts))
     except Exception as exc:
         logger.warning("c8o8Fe failed: %s", exc)
     return None
@@ -569,11 +571,16 @@ async def gemini_generate_image(
     ctx: Context,
     model: Optional[str] = None,
     files: Optional[list[str]] = None,
+    conversation_id: Optional[list[str]] = None,
 ) -> str:
     """Generate or edit images with Gemini.
 
     Without files: generates a new image from the text prompt.
     With files: edits/transforms the provided image(s) based on the prompt.
+
+    Pass conversation_id from a previous call to continue refining images
+    in the same conversation thread (e.g. "make it more dramatic", "add rain").
+    You can also use a cid from the Gemini web URL (gemini.google.com/app/{cid}).
 
     Images are saved to ~/Pictures/gemini/ and full file paths are returned.
 
@@ -583,9 +590,12 @@ async def gemini_generate_image(
         model: Model name. Defaults to gemini-3.0-flash-thinking
                (Nano Banana 2, supports non-square aspect ratios).
         files: Optional list of file paths to images to edit/transform.
+        conversation_id: Optional list of [cid, rid, rcid] from a previous
+                         gemini_generate_image response to continue the conversation.
+                         Passing just [cid] (from browser URL) also works.
 
     Returns:
-        JSON with generated image paths and metadata, or an error message.
+        JSON with generated image paths, conversation_id for continuation, or an error message.
     """
     global _image_mode
     try:
@@ -600,13 +610,23 @@ async def gemini_generate_image(
                     return f"Error: File not found — {p}"
                 resolved_files.append(str(p))
 
+        chat = None
         async with _image_lock:
             _image_mode = True
             try:
-                kwargs = {"model": model or "gemini-3.0-flash-thinking"}
-                if resolved_files:
-                    kwargs["files"] = resolved_files
-                response = await client.generate_content(prompt, **kwargs)
+                if conversation_id:
+                    chat = client.start_chat(
+                        metadata=conversation_id,
+                        model=model or "gemini-3.0-flash-thinking",
+                    )
+                    response = await chat.send_message(
+                        prompt, files=resolved_files or None
+                    )
+                else:
+                    kwargs = {"model": model or "gemini-3.0-flash-thinking"}
+                    if resolved_files:
+                        kwargs["files"] = resolved_files
+                    response = await client.generate_content(prompt, **kwargs)
             finally:
                 _image_mode = False
 
@@ -614,7 +634,14 @@ async def gemini_generate_image(
             return response.text or "No images were generated. Try rephrasing your prompt."
 
         # --- Try to get 2x download URLs via c8o8Fe RPC ---
-        metadata = list(_last_metadata)  # snapshot before it's overwritten
+        # Always prefer _last_metadata from monkey-patched response parsing
+        # (captures raw stream data needed for c8o8Fe). Fall back to chat metadata.
+        if _last_metadata and _last_metadata[0]:
+            metadata = list(_last_metadata)
+        elif chat:
+            metadata = [chat.cid or "", chat.rid or "", chat.rcid or ""]
+        else:
+            metadata = []
         download_urls: dict[int, str] = {}
         for i, image in enumerate(response.images):
             token = _image_tokens.pop(image.url, None)
@@ -658,10 +685,16 @@ async def gemini_generate_image(
             title = getattr(image, "title", None) or f"image_{i}"
             saved.append({"title": title, "path": filepath, "dir": str(IMAGES_DIR)})
 
+        # For response: prefer chat metadata (clean cid/rid/rcid), fall back to raw
+        if chat:
+            conv_id = [chat.cid or "", chat.rid or "", chat.rcid or ""]
+        else:
+            conv_id = metadata[:3] if metadata and metadata[0] else None
         result = {
             "text": response.text or "",
             "images_saved_to": str(IMAGES_DIR),
             "images": saved,
+            "conversation_id": conv_id,
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
 
