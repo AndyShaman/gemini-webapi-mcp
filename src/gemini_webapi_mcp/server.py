@@ -188,7 +188,7 @@ async def app_lifespan(server):
     client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index)
     if account_index:
         logger.info("Using Google account index: %d", account_index)
-    await client.init(timeout=600, watchdog_timeout=120, auto_close=False, auto_refresh=True)
+    await client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
     _patch_client(client)
 
     yield {"gemini_client": client, "chat_sessions": {}}
@@ -234,9 +234,10 @@ def _patch_client(gemini_client):
 
     # Browser-compatible body params (indices in inner_req_list).
     # Without these, certain operations (image editing with files) may fail.
+    # Synced with HanaokaYuzu/Gemini-API v1.21.0 (2026-03-06).
     _BROWSER_PARAMS = {
         1: [os.environ.get("GEMINI_LANGUAGE", "en")],
-        6: [1],
+        6: [0],
         10: 1,
         11: 0,
         17: [[0]],
@@ -245,7 +246,8 @@ def _patch_client(gemini_client):
         30: [4],
         41: [1],
         53: 0,
-        68: 2,
+        61: [],
+        68: 1,
     }
 
     http = gemini_client.client  # curl_cffi.AsyncSession
@@ -270,8 +272,10 @@ def _patch_client(gemini_client):
 
             headers["x-goog-ext-73010989-jspb"] = "[0]"
             headers["x-goog-ext-73010990-jspb"] = "[0]"
+            # Per-request UUID must match between header and body[59]
+            req_uuid = str(uuid.uuid4())
             headers["x-goog-ext-525005358-jspb"] = json.dumps(
-                [str(uuid.uuid4()), 1]
+                [req_uuid, 1]
             )
 
             kwargs["headers"] = headers
@@ -285,6 +289,8 @@ def _patch_client(gemini_client):
                     for idx, val in _BROWSER_PARAMS.items():
                         if inner[idx] is None:
                             inner[idx] = val
+                    # Sync UUID with header (upstream HanaokaYuzu v1.21)
+                    inner[59] = req_uuid
 
                     # Fix file_data format:
                     # Library:  [[[url], "name"]]
@@ -315,14 +321,61 @@ def _patch_client(gemini_client):
 
     http.request = patched_request
 
-    # --- Wrap parse_response_by_frame to capture image download tokens ---
+    # --- Patch _parse_generated_images for new dict-based response format ---
+    # Google changed response structure: [12][7][0] (list) -> [12][0]["8"] (dict).
+    # See HanaokaYuzu/Gemini-API issues #229, #260, #264.
     import gemini_webapi.client as _gwc
     from gemini_webapi.utils import (
         get_nested_value,
         parse_response_by_frame as _orig_parse,
     )
+    from gemini_webapi.types import GeneratedImage
     import orjson as _json
 
+    _orig_parse_images = _gwc._parse_generated_images
+
+    def _patched_parse_images(candidate_data, proxy=None, cookies=None, account_index=0, session_kwargs=None):
+        # Try original parser first (old list-based format)
+        result = _orig_parse_images(candidate_data, proxy, cookies, account_index, session_kwargs)
+        if result:
+            return result
+
+        # Fallback: new dict-based format at [12][0]["8"]
+        val12 = get_nested_value(candidate_data, [12])
+        if not isinstance(val12, list) or not val12:
+            return result
+        entry = val12[0]
+        if not isinstance(entry, dict) or "8" not in entry:
+            return result
+        generated_images = []
+        for gen_img_data in entry["8"]:
+            # Structure: [[[null, null, null, [null, 1, "filename.png", "url", ...], ...], ...]]
+            url_arr = get_nested_value(gen_img_data, [0, 0, 3])
+            if isinstance(url_arr, list) and len(url_arr) >= 4:
+                url = url_arr[3]
+                title = url_arr[2] or "[Generated Image]"
+                token = url_arr[4] if len(url_arr) > 4 else None
+                if url and isinstance(url, str) and url.startswith("http"):
+                    if token:
+                        _image_tokens[url] = token
+                    generated_images.append(
+                        GeneratedImage(
+                            url=url,
+                            title=f"[Generated Image]",
+                            alt="",
+                            proxy=proxy,
+                            cookies=cookies,
+                            account_index=account_index,
+                            session_kwargs=session_kwargs or {},
+                        )
+                    )
+        if generated_images:
+            logger.info("Parsed %d images from new dict-based response format", len(generated_images))
+        return generated_images
+
+    _gwc._parse_generated_images = _patched_parse_images
+
+    # --- Wrap parse_response_by_frame to capture image download tokens ---
     def _patched_parse(buffer):
         parts, remaining = _orig_parse(buffer)
         for part in parts:
@@ -335,7 +388,6 @@ def _patch_client(gemini_client):
                 m_data = get_nested_value(part_json, [1])
                 if isinstance(m_data, list) and len(m_data) >= 2 and m_data[0]:
                     if len(_last_metadata) >= 3:
-                        # Update cid/rid but preserve captured rcid
                         _last_metadata[0] = m_data[0]
                         _last_metadata[1] = m_data[1]
                     else:
@@ -347,16 +399,25 @@ def _patch_client(gemini_client):
                     rcid = get_nested_value(cand, [0])
                     if rcid and isinstance(rcid, str) and rcid.startswith("rc_"):
                         if len(_last_metadata) >= 2:
-                            # Ensure rcid is at index 2
                             if len(_last_metadata) == 2:
                                 _last_metadata.append(rcid)
                             else:
                                 _last_metadata[2] = rcid
+                    # Old format: [12][7][0]
                     for gid in get_nested_value(cand, [12, 7, 0], []):
                         url = get_nested_value(gid, [0, 3, 3])
                         token = get_nested_value(gid, [0, 3, 5])
                         if url and token:
                             _image_tokens[url] = token
+                    # New dict format: [12][0]["8"]
+                    val12 = get_nested_value(cand, [12])
+                    if isinstance(val12, list) and val12 and isinstance(val12[0], dict):
+                        for gid in val12[0].get("8", []):
+                            url_arr = get_nested_value(gid, [0, 0, 3])
+                            if isinstance(url_arr, list) and len(url_arr) >= 5:
+                                url, token = url_arr[3], url_arr[4]
+                                if url and token:
+                                    _image_tokens[url] = token
             except Exception:
                 pass
         return parts, remaining
@@ -815,7 +876,7 @@ async def gemini_reset(ctx: Context) -> str:
         new_client = GeminiClient(
             secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index
         )
-        await new_client.init(timeout=600, watchdog_timeout=120, auto_close=False, auto_refresh=True)
+        await new_client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
         _patch_client(new_client)
 
         ctx.request_context.lifespan_context["gemini_client"] = new_client
