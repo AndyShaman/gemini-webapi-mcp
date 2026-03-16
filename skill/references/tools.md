@@ -49,6 +49,7 @@ Generate new images or edit existing ones. Watermark auto-removed.
 | `prompt` | yes | — | Image description or editing instruction |
 | `files` | no | — | List of file paths for image editing |
 | `model` | no | `gemini-3.0-flash-thinking` | Image model (Nano Banana 2, supports aspect ratios) |
+| `conversation_id` | no | — | `[cid, rid, rcid]` from previous call for iterative refinement |
 
 **Generate:**
 ```
@@ -60,7 +61,12 @@ gemini_generate_image(prompt="a serene mountain lake at sunset, oil painting sty
 gemini_generate_image(prompt="make the sky purple", files=["/path/to/image.png"])
 ```
 
-**Output:** PNG saved to `~/Pictures/gemini/`, 2x upscaled resolution. Watermark auto-removed.
+**Iterative refinement** (continue from previous generation):
+```
+gemini_generate_image(prompt="make it more dramatic", conversation_id=["c_xxx", "r_xxx", "rc_xxx"])
+```
+
+**Output:** PNG saved to `~/Pictures/gemini/`, 2x upscaled resolution. Watermark auto-removed. Returns `conversation_id` for continuation.
 
 **Resolution (2x upscale):**
 - 16:9: 2816x1536 (native 1408x768, auto-upscaled 2x)
@@ -125,8 +131,8 @@ gemini_reset()
 | Problem | Solution |
 |---------|----------|
 | Auth error / cookies expired | `gemini_reset` |
-| Stream interrupted / timeout | Server auto-retries; for heavy prompts with files, wait up to 5 min |
-| No images in response | Prompt may violate content policy, rephrase |
+| Stream interrupted / timeout | Server auto-retries (watchdog 45s); file editing may need 2-3 retries |
+| No images in response | Prompt may violate content policy, rephrase. For file editing: update server (`git pull && uv sync`) |
 | Square image despite aspect ratio | Include "16:9" or "9:16" in prompt text |
 | Error 1052 / image generation fails | Google rotated model IDs. Update server to latest version: `git pull && uv sync` |
 
