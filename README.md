@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/andyshaman-gemini-webapi-mcp-badge.png)](https://mseep.ai/app/andyshaman-gemini-webapi-mcp)
+
 <h1 align="center">gemini-webapi-mcp</h1>
 
 <p align="center">
