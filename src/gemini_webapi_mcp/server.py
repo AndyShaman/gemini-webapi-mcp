@@ -299,6 +299,82 @@ def _make_gen_id() -> str:
     return (base * 3)[:16]
 
 
+async def _api_generate_image(prompt: str) -> list[str]:
+    """Generate image via Google Generative Language API.
+
+    Requires ``GEMINI_API_KEY`` environment variable (Google AI Studio key).
+    Returns a list containing the saved file path on success.
+    Raises ``RuntimeError`` on failure so callers can fall through.
+    """
+    import base64
+    import curl_cffi.requests as _cffi
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set")
+
+    model = os.environ.get("GEMINI_IMAGE_API_MODEL", "gemini-2.5-flash-image")
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent?key={api_key}"
+    )
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseModalities": ["IMAGE", "TEXT"]},
+    }
+    async with _cffi.AsyncSession() as s:
+        resp = await s.post(url, json=body, timeout=120)
+
+    if resp.status_code == 429:
+        raise RuntimeError("Gemini API quota exceeded")
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:200]}")
+
+    data = resp.json()
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    image_parts = [p for p in parts if "inlineData" in p]
+    if not image_parts:
+        text = " ".join(p.get("text", "") for p in parts if "text" in p)
+        raise RuntimeError(f"No image in API response — {text[:120]}")
+
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for i, p in enumerate(image_parts):
+        img_bytes = base64.b64decode(p["inlineData"]["data"])
+        mime = p["inlineData"].get("mimeType", "image/jpeg")
+        ext = mime.split("/")[-1] if "/" in mime else "jpg"
+        fname = IMAGES_DIR / f"gemini_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{i}.{ext}"
+        fname.write_bytes(img_bytes)
+        saved.append(str(fname))
+    return saved
+
+
+async def _pollinations_generate_image(prompt: str) -> list[str]:
+    """Generate image via Pollinations.ai — zero-auth, no API key required.
+
+    Uses curl_cffi Chrome impersonation to satisfy Pollinations' bot checks.
+    Returns a list containing the saved file path on success.
+    Raises ``RuntimeError`` on failure.
+    """
+    import urllib.parse
+    import curl_cffi.requests as _cffi
+
+    encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?nologo=true&model=flux"
+    async with _cffi.AsyncSession(impersonate="chrome110") as s:
+        resp = await s.get(url, timeout=60)
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Pollinations error {resp.status_code}")
+    if len(resp.content) < 1000:
+        raise RuntimeError("Pollinations returned unexpectedly small response")
+
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    fname = IMAGES_DIR / f"gemini_{datetime.now().strftime('%Y%m%d_%H%M%S')}_0.jpg"
+    fname.write_bytes(resp.content)
+    return [str(fname)]
+
+
 # ---------------------------------------------------------------------------
 # Lifespan: initialise GeminiClient once, reuse across all tool calls
 # ---------------------------------------------------------------------------
@@ -804,6 +880,27 @@ async def gemini_generate_image(
     import time
     t0 = time.monotonic()
     try:
+        # Fast path for simple text-to-image: try API key then Pollinations before
+        # spinning up the full library session (which requires browser cookies).
+        if not files and not conversation_id:
+            # 1. Generative Language API (GEMINI_API_KEY env var)
+            if os.environ.get("GEMINI_API_KEY"):
+                try:
+                    paths = await asyncio.wait_for(_api_generate_image(prompt), timeout=120)
+                    if paths:
+                        return json.dumps({"images": paths, "conversation_id": []})
+                except (RuntimeError, asyncio.TimeoutError) as _e:
+                    logger.info("API key path failed (%s) — falling back to cookie session", _e)
+
+            # 2. Pollinations.ai (GEMINI_USE_POLLINATIONS=1 or cookie session unavailable)
+            if os.environ.get("GEMINI_USE_POLLINATIONS") == "1":
+                try:
+                    paths = await asyncio.wait_for(_pollinations_generate_image(prompt), timeout=60)
+                    if paths:
+                        return json.dumps({"images": paths, "conversation_id": []})
+                except (RuntimeError, asyncio.TimeoutError) as _e:
+                    logger.info("Pollinations fallback failed (%s) — trying cookie session", _e)
+
         client = _get_client(ctx)
 
         # Validate input files
