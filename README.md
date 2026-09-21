@@ -146,6 +146,8 @@ uv run --with "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-weba
 
 > **Несколько Google-аккаунтов?** Установите `GEMINI_ACCOUNT_INDEX` — номер аккаунта из Chrome (0 = первый, 1 = второй, ...). Посмотрите порядок: кликните на аватарку в gemini.google.com.
 
+> **Gemini отвечает «Are you signed in?» или ошибкой 1096, хотя в Chrome вы залогинены?** Сервер берёт cookies только с домена `.google.com` (версия от 2026-09-21); если у вас старая версия, а в Chrome есть cookies национальных доменов Google (`.google.com.bd`, `.google.co.uk` …), обновите сервер.
+
 Если автоопределение cookies не работает, задайте их вручную:
 
 1. Откройте Chrome DevTools на gemini.google.com → Application → Cookies
@@ -404,6 +406,8 @@ Then open Claude Code or Claude Desktop and try: *"Generate a watercolor cat ima
 The server reads cookies from Chrome automatically via `browser-cookie3`.
 
 > **Multiple Google accounts?** Set `GEMINI_ACCOUNT_INDEX` — the account number from Chrome (0 = first, 1 = second, ...). Check the order by clicking your avatar on gemini.google.com.
+
+> **Gemini answers "Are you signed in?" or error 1096 while Chrome is logged in?** The server takes cookies from the `.google.com` domain only (since 2026-09-21); on an older version, cookies of Google country domains in Chrome (`.google.com.bd`, `.google.co.uk` …) break auth — update the server.
 
 If cookie auto-detection fails, set them manually:
 
