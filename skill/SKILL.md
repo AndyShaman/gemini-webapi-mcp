@@ -14,6 +14,20 @@ Interact with Google Gemini via `gemini-webapi-mcp` MCP server.
 | Tool parameters, models, troubleshooting | [tools.md](references/tools.md) |
 | Image generation prompting | [image-prompting.md](references/image-prompting.md) |
 
+## How to Call
+
+The tools below live on the `gemini` MCP server. Pick the path that matches how the
+server is registered — the tool names and arguments are identical in both:
+
+- **Registered in Claude Code** (`claude mcp add-json gemini …`, see README) → the tools
+  are native: call `mcp__gemini__gemini_generate_image` etc. directly.
+- **Registered in [mcp-cli](https://github.com/philschmid/mcp-cli)** (`~/.config/mcp/mcp_servers.json`)
+  → run it from the shell; the JSON result carries `images[].path` and `conversation_id`:
+  ```
+  mcp-cli call gemini gemini_generate_image '{"prompt":"A red apple on a white table, 16:9"}'
+  ```
+  Image generation takes 20–60 s (up to several minutes for edits) — allow a long timeout.
+
 ## Quick Start
 
 **Chat:**
