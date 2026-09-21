@@ -272,6 +272,10 @@ def _resolve_cookies() -> tuple[str, str]:
         cookie_file = os.environ.get("CHROME_COOKIE_FILE") or None
         cj = browser_cookie3.chrome(domain_name=".google.com", cookie_file=cookie_file)
         for cookie in cj:
+            # domain_name is a substring filter: `.google.com.bd` etc. also match,
+            # and their session cookies are not valid for gemini.google.com.
+            if cookie.domain != ".google.com":
+                continue
             if cookie.name == "__Secure-1PSID" and cookie.value:
                 psid = cookie.value
             elif cookie.name == "__Secure-1PSIDTS" and cookie.value:
