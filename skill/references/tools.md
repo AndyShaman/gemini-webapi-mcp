@@ -41,7 +41,8 @@ gemini_start_chat(model="gemini-3.0-pro")
 
 ## gemini_generate_image
 
-Generate new images or edit existing ones. Watermark auto-removed.
+Generate new images or edit existing ones. Watermark removed automatically (built-in,
+deterministic — see Output).
 
 **Parameters:**
 | Param | Required | Default | Description |
@@ -66,7 +67,19 @@ gemini_generate_image(prompt="make the sky purple", files=["/path/to/image.png"]
 gemini_generate_image(prompt="make it more dramatic", conversation_id=["c_xxx", "r_xxx", "rc_xxx"])
 ```
 
-**Output:** PNG saved to `~/Pictures/gemini/`, 2x upscaled resolution. The Gemini ✦ sparkle is auto-removed (built-in deterministic Reverse Alpha Blending; clean on any background). Removal follows the conversation pipeline — a continuation inherits the root's mode (txt2img → margin 32 vs photo-edit → margin 96), persisted per `conversation_id` in `~/Pictures/gemini/.wm_conv_modes.json`; an unknown cid falls back to shape+colour auto-detection. Returns `conversation_id` for continuation. Set `GEMINI_WM_KEEP=1` to keep the watermark for diagnostics.
+**Editing your OWN previous output — prefer `conversation_id` over re-passing `files`.**
+To change something in an image Gemini just generated, pass back its `conversation_id`
+instead of re-uploading the PNG via `files`. The model edits its own last output in place
+(better fidelity). Use `files` only when the source is an ORIGINAL photo Gemini has not
+produced.
+
+**Output:** PNG saved to `~/Pictures/gemini/`, 2x upscaled resolution. Returns
+`conversation_id` for continuation. The Gemini ✦ sparkle is removed automatically by the
+server (built-in deterministic reverse alpha-blend; clean on any background). Both fixed
+corner anchors (96 px and 32 px from the bottom-right) are processed every time with a
+per-image opacity fit and a self-check that reverts any subtraction which does not reduce
+the star correlation — no modes, no detection thresholds, no per-conversation state.
+Set `GEMINI_WM_KEEP=1` to keep the watermark for diagnostics.
 
 **Resolution (2x upscale):**
 - 16:9: 2816x1536 (native 1408x768, auto-upscaled 2x)
