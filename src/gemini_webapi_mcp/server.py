@@ -22,6 +22,11 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP, Context
 
+# Load native extensions eagerly: on Windows, importing numpy/PIL for the first
+# time inside a tool call deadlocks while the stdio thread is blocked reading stdin.
+import numpy  # noqa: F401
+import PIL.Image  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Logging (stderr only — stdout reserved for MCP stdio transport)
 # ---------------------------------------------------------------------------
