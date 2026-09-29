@@ -160,7 +160,7 @@ gemini_reset()
 
 **Cookie auth on headless/remote servers:**
 
-By default, cookies are read automatically from a local Chrome or Firefox browser via `browser-cookie3`. On headless servers (no browser), set `GEMINI_PSID` and `GEMINI_PSIDTS` manually:
+By default, cookies are read automatically from a local Chrome or Firefox browser via `browser-cookie3`. On headless servers (no Chrome nor Firefox), set `GEMINI_PSID` and `GEMINI_PSIDTS` manually:
 
 1. Open Chrome on any machine → go to `gemini.google.com` → sign in
 2. DevTools (F12) → Application → Cookies → `https://gemini.google.com`
