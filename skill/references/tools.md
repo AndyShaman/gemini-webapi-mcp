@@ -153,14 +153,14 @@ gemini_reset()
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEMINI_PSID` | — | Override `__Secure-1PSID` cookie (instead of reading from Chrome) |
+| `GEMINI_PSID` | — | Override `__Secure-1PSID` cookie (instead of reading from Chrome/Firefox) |
 | `GEMINI_PSIDTS` | — | Override `__Secure-1PSIDTS` cookie |
 | `GEMINI_ACCOUNT_INDEX` | `0` | Google account index (for multi-account Chrome profiles) |
 | `GEMINI_LANGUAGE` | `en` | Language for Gemini responses |
 
 **Cookie auth on headless/remote servers:**
 
-By default, cookies are read automatically from a local Chrome browser via `browser-cookie3`. On headless servers (no Chrome), set `GEMINI_PSID` and `GEMINI_PSIDTS` manually:
+By default, cookies are read automatically from a local Chrome or Firefox browser via `browser-cookie3`. On headless servers (no Chrome nor Firefox), set `GEMINI_PSID` and `GEMINI_PSIDTS` manually:
 
 1. Open Chrome on any machine → go to `gemini.google.com` → sign in
 2. DevTools (F12) → Application → Cookies → `https://gemini.google.com`

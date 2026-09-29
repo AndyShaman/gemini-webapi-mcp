@@ -28,13 +28,13 @@
 - **Анализ файлов** — видео, изображения, PDF, документы
 - **Текстовый чат** с Gemini (Flash, Pro, Flash-Thinking)
 - **Авто-удаление вотермарки** — sparkle-метка Gemini убирается встроенным детерминированным Reverse Alpha Blending (без внешних бинарников, ML-моделей и скачиваний)
-- **Авто-аутентификация** через cookies из Chrome
+- **Авто-аутентификация** через cookies из Chrome или Firefox
 
 ## Быстрый старт
 
 ### 1. Войдите в Gemini
 
-Откройте Chrome, перейдите на [gemini.google.com](https://gemini.google.com) и войдите в свой Google-аккаунт.
+Откройте Chrome или Firefox, перейдите на [gemini.google.com](https://gemini.google.com) и войдите в свой Google-аккаунт.
 
 ### 2. Установите MCP-сервер
 
@@ -142,7 +142,7 @@ uv run --with "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-weba
 
 ## Аутентификация
 
-Сервер автоматически читает cookies из Chrome через `browser-cookie3`.
+Сервер автоматически читает cookies через `browser-cookie3`: сначала из Chrome, затем из Firefox.
 
 > **Несколько Google-аккаунтов?** Установите `GEMINI_ACCOUNT_INDEX` — номер аккаунта из Chrome (0 = первый, 1 = второй, ...). Посмотрите порядок: кликните на аватарку в gemini.google.com.
 
@@ -173,8 +173,8 @@ uv run --with "gemini-webapi-mcp @ git+https://github.com/AndyShaman/gemini-weba
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
-| `GEMINI_PSID` | Значение cookie `__Secure-1PSID` | авто из Chrome |
-| `GEMINI_PSIDTS` | Значение cookie `__Secure-1PSIDTS` | авто из Chrome |
+| `GEMINI_PSID` | Значение cookie `__Secure-1PSID` | авто из Chrome/Firefox |
+| `GEMINI_PSIDTS` | Значение cookie `__Secure-1PSIDTS` | авто из Chrome/Firefox |
 | `GEMINI_LANGUAGE` | Язык ответов Gemini (`ru`, `en`, `ja`, ...) | `en` |
 | `GEMINI_ACCOUNT_INDEX` | Индекс Google-аккаунта (0, 1, 2, ...) | `0` |
 
@@ -289,13 +289,13 @@ gemini_upload_file(file_path="/path/to/doc.pdf", prompt="Сделай кратк
 - **File analysis** — video, images, PDF, documents
 - **Text chat** with Gemini (Flash, Pro, Flash-Thinking)
 - **Auto watermark removal** — Gemini's sparkle mark is stripped by a built-in deterministic Reverse Alpha Blending pass (no external binaries, ML models, or downloads)
-- **Auto-authentication** via Chrome browser cookies
+- **Auto-authentication** via Chrome or Firefox browser cookies
 
 ## Quick Start
 
 ### 1. Log into Gemini
 
-Open Chrome, go to [gemini.google.com](https://gemini.google.com) and sign in.
+Open Chrome or Firefox, go to [gemini.google.com](https://gemini.google.com) and sign in.
 
 ### 2. Install the MCP server
 
@@ -403,7 +403,7 @@ Then open Claude Code or Claude Desktop and try: *"Generate a watercolor cat ima
 
 ## Authentication
 
-The server reads cookies from Chrome automatically via `browser-cookie3`.
+The server reads cookies automatically via `browser-cookie3`: from Chrome first, then from Firefox.
 
 > **Multiple Google accounts?** Set `GEMINI_ACCOUNT_INDEX` — the account number from Chrome (0 = first, 1 = second, ...). Check the order by clicking your avatar on gemini.google.com.
 
@@ -434,8 +434,8 @@ If cookie auto-detection fails, set them manually:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GEMINI_PSID` | Cookie value `__Secure-1PSID` | auto from Chrome |
-| `GEMINI_PSIDTS` | Cookie value `__Secure-1PSIDTS` | auto from Chrome |
+| `GEMINI_PSID` | Cookie value `__Secure-1PSID` | auto from Chrome/Firefox |
+| `GEMINI_PSIDTS` | Cookie value `__Secure-1PSIDTS` | auto from Chrome/Firefox |
 | `GEMINI_LANGUAGE` | Gemini response language (`ru`, `en`, `ja`, ...) | `en` |
 | `GEMINI_ACCOUNT_INDEX` | Google account index (0, 1, 2, ...) | `0` |
 

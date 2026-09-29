@@ -265,34 +265,39 @@ def _resolve_cookies() -> tuple[str, str]:
         logger.info("Using Gemini cookies from environment variables")
         return psid, psidts
 
-    # --- Priority 2: Chrome browser cookies ---
+    # --- Priority 2: browser cookies (Chrome, then Firefox) ---
     try:
         import browser_cookie3
-
-        cookie_file = os.environ.get("CHROME_COOKIE_FILE") or None
-        cj = browser_cookie3.chrome(domain_name=".google.com", cookie_file=cookie_file)
-        for cookie in cj:
-            # domain_name is a substring filter: `.google.com.bd` etc. also match,
-            # and their session cookies are not valid for gemini.google.com.
-            if cookie.domain != ".google.com":
-                continue
-            if cookie.name == "__Secure-1PSID" and cookie.value:
-                psid = cookie.value
-            elif cookie.name == "__Secure-1PSIDTS" and cookie.value:
-                psidts = cookie.value
-        if psid:
-            logger.info("Using Gemini cookies from Chrome browser")
-            return psid, psidts
-        logger.warning("browser-cookie3: no __Secure-1PSID cookie found in Chrome")
+        browsers = ("Chrome", "Firefox")
     except ImportError:
-        logger.warning("browser-cookie3 not installed — cannot read cookies from Chrome")
-    except Exception as exc:
-        logger.warning("browser-cookie3: failed to read Chrome cookies — %s", type(exc).__name__)
+        browsers = ()
+        logger.warning("browser-cookie3 not installed — cannot read cookies from a browser")
+
+    for browser_name in browsers:
+        try:
+            loader = getattr(browser_cookie3, browser_name.lower())
+            cookie_file = os.environ.get(f"{browser_name.upper()}_COOKIE_FILE") or None
+            cj = loader(domain_name=".google.com", cookie_file=cookie_file)
+            for cookie in cj:
+                # domain_name is a substring filter: `.google.com.bd` etc. also match,
+                # and their session cookies are not valid for gemini.google.com.
+                if cookie.domain != ".google.com":
+                    continue
+                if cookie.name == "__Secure-1PSID" and cookie.value:
+                    psid = cookie.value
+                elif cookie.name == "__Secure-1PSIDTS" and cookie.value:
+                    psidts = cookie.value
+            if psid:
+                logger.info("Using Gemini cookies from %s browser", browser_name)
+                return psid, psidts
+            logger.warning("browser-cookie3: no __Secure-1PSID cookie found in %s", browser_name)
+        except Exception as exc:
+            logger.warning("browser-cookie3: failed to read %s cookies — %s", browser_name, type(exc).__name__)
 
     # --- Nothing worked ---
     raise RuntimeError(
         "Gemini cookies not found. Options:\n"
-        "  1. Log into gemini.google.com in Chrome and install browser-cookie3, or\n"
+        "  1. Log into gemini.google.com in Chrome or Firefox and install browser-cookie3, or\n"
         "  2. Set GEMINI_PSID (and optionally GEMINI_PSIDTS) environment variables."
     )
 
