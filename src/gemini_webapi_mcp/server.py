@@ -51,6 +51,11 @@ GEN_TIMEOUT = float(os.environ.get("GEMINI_GEN_TIMEOUT", "600"))
 # Per-network-op timeout for image download in image.save() (seconds). Without
 # this the CDN fetch of the full-size (=s0, ~4.5MB) image can hang forever.
 DOWNLOAD_TIMEOUT = float(os.environ.get("GEMINI_DOWNLOAD_TIMEOUT", "60"))
+# Overall cap for the c8o8Fe 2x-upscale RPC (seconds). Its one HTTP post carries
+# timeout=60, but if that is not honoured (loop stall, redirect, retry) the call
+# is otherwise unbounded and hangs the whole tool — so wrap it here and fall back
+# to preview resolution on timeout. Override with GEMINI_UPSCALE_TIMEOUT.
+UPSCALE_TIMEOUT = float(os.environ.get("GEMINI_UPSCALE_TIMEOUT", "90"))
 
 # Optional stage timing: set GEMINI_DEBUG_TIMING=1 to log per-stage wall-time.
 _DEBUG_TIMING = os.environ.get("GEMINI_DEBUG_TIMING") == "1"
@@ -312,6 +317,109 @@ def _resolve_cookies() -> tuple[str, str]:
 _GEMINI_COOKIE_DOMAINS = frozenset({".google.com", "gemini.google.com", ".gemini.google.com"})
 
 
+def _read_cookie_file_rows(text: str):
+    """Parse an exported cookie file into (domain, name, value, path, expires) rows.
+
+    Accepts two formats, auto-detected:
+      * a JSON array export ([{domain, name, value, path, expirationDate}, ...])
+        as produced by browser cookie-export extensions, and
+      * Netscape cookies.txt (tab-separated, with the optional `#HttpOnly_`
+        domain prefix some tools write).
+    `expires` is a POSIX timestamp, or None for a session cookie. Rows that do
+    not parse are skipped; the file's own content is never raised or logged.
+    """
+    rows: list[tuple[str, str, str, str, Optional[float]]] = []
+    stripped = text.lstrip()
+    if stripped[:1] in ("[", "{"):
+        try:
+            data = json.loads(text)
+        except Exception:
+            return rows
+        if isinstance(data, dict):
+            data = data.get("cookies", [])
+        for c in data if isinstance(data, list) else []:
+            if not isinstance(c, dict):
+                continue
+            name = c.get("name")
+            value = c.get("value")
+            domain = c.get("domain")
+            if not name or value is None or not domain:
+                continue
+            exp = c.get("expirationDate", c.get("expires"))
+            try:
+                expires = float(exp) if exp is not None else None
+            except (TypeError, ValueError):
+                expires = None
+            rows.append((domain, name, str(value), c.get("path") or "/", expires))
+        return rows
+
+    # Netscape cookies.txt
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith("#") and not line.startswith("#HttpOnly_"):
+            continue
+        fields = line.split("\t")
+        if len(fields) < 7:
+            # Some exports (and hand-saved files) use spaces, not tabs. Cookie
+            # fields here carry no internal spaces, so a generic split recovers
+            # them; the tab split is tried first so a value with spaces is kept.
+            fields = line.split()
+        if len(fields) < 7:
+            continue
+        domain = fields[0]
+        if domain.startswith("#HttpOnly_"):
+            domain = domain[len("#HttpOnly_"):]
+        path, expiry_raw, name, value = fields[2], fields[4], fields[5], fields[6]
+        try:
+            expires = float(expiry_raw)
+        except (TypeError, ValueError):
+            expires = None
+        rows.append((domain, name, value, path or "/", expires))
+    return rows
+
+
+def _file_cookie_jar(path: str):
+    """Load the full Gemini web session from a cookie file the user exported.
+
+    On Windows, Chrome's cookie store can't be read by browser-cookie3 (app-bound
+    encryption), and since Google's 2026-11-12 web build the two PSID cookies
+    alone get every request answered with HTTP 400. The user exports their
+    google.com cookies (Netscape cookies.txt or a JSON array) while signed in to
+    Gemini and points GEMINI_COOKIES_FILE at the file.
+
+    Only Gemini-session-domain cookies are kept, each with its real domain so it
+    is only ever sent to Google hosts; expired cookies are dropped. Raises
+    RuntimeError — never containing a cookie value — when the file is missing or
+    carries no __Secure-1PSID session cookie.
+    """
+    import time
+
+    from curl_cffi.requests import Cookies
+
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f"Cookie file not found: {path}")
+
+    rows = _read_cookie_file_rows(p.read_text(encoding="utf-8", errors="replace"))
+    now = time.time()
+    jar = Cookies()
+    for domain, name, value, cpath, expires in rows:
+        if domain not in _GEMINI_COOKIE_DOMAINS or not value:
+            continue
+        if expires is not None and 0 < expires < now:
+            continue
+        jar.set(name, value, domain=domain, path=cpath or "/")
+
+    if not jar.get("__Secure-1PSID", domain=".google.com"):
+        raise RuntimeError(
+            f"Cookie file {path} has no __Secure-1PSID Google session cookie. "
+            "Export the full google.com cookie set while signed in to "
+            "gemini.google.com and try again."
+        )
+    return jar
+
+
 def _browser_cookie_jar():
     """Return Chrome's full Gemini-session cookie jar, or None.
 
@@ -345,15 +453,27 @@ async def _new_client():
     """Create, initialise and patch a GeminiClient (startup and gemini_reset)."""
     from gemini_webapi import GeminiClient
 
-    psid, psidts = _resolve_cookies()
+    # GEMINI_COOKIES_FILE (the user's exported full google.com cookie set) is
+    # preferred: on Windows the Chrome store can't be read, and the two PSID
+    # cookies alone now get HTTP 400. The file carries the whole session, so the
+    # constructor's PSID/PSIDTS are drawn from it rather than from the env vars.
+    cookies_file = os.environ.get("GEMINI_COOKIES_FILE")
+    full_jar = _file_cookie_jar(cookies_file) if cookies_file else _browser_cookie_jar()
+
+    if cookies_file:
+        psid = full_jar.get("__Secure-1PSID", domain=".google.com")
+        psidts = full_jar.get("__Secure-1PSIDTS", domain=".google.com") or ""
+        logger.info("Using the exported cookie file for the Gemini session")
+    else:
+        psid, psidts = _resolve_cookies()
+
     account_index = int(os.environ.get("GEMINI_ACCOUNT_INDEX", "0"))
     client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index)
-    full_jar = _browser_cookie_jar()
     if full_jar is not None:
         # Replace rather than merge: the constructor's domain-less PSID copies
         # would make gemini_webapi's name-only cookie lookups ambiguous.
         client.cookies = full_jar
-        logger.info("Using full Chrome cookie set for the Gemini session (%d cookies)", len(full_jar.jar))
+        logger.info("Using full cookie set for the Gemini session (%d cookies)", len(full_jar.jar))
     if account_index:
         logger.info("Using Google account index: %d", account_index)
     await client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
@@ -948,7 +1068,17 @@ async def gemini_generate_image(
                 token = _image_tokens.pop(image.url, None)
                 if token and metadata:
                     logger.info("Requesting 2x download URL for image %d...", i)
-                    dl_url = await _fetch_download_url(client, token, prompt, metadata, i)
+                    try:
+                        dl_url = await asyncio.wait_for(
+                            _fetch_download_url(client, token, prompt, metadata, i),
+                            timeout=UPSCALE_TIMEOUT,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "2x upscale URL for image %d exceeded %.0fs — using preview resolution",
+                            i, UPSCALE_TIMEOUT,
+                        )
+                        dl_url = None
                     if dl_url:
                         download_urls[i] = dl_url
                         logger.info("Got 2x download URL for image %d", i)
@@ -990,13 +1120,23 @@ async def gemini_generate_image(
                 image.url = _with_alr(image.url)
 
             try:
-                filepath = await image.save(
-                    path=str(IMAGES_DIR),
-                    filename=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}.png",
-                    verbose=False,
-                    full_size=full_size,
-                    cookies=_image_download_cookies(client),
+                # Hard overall cap in addition to the per-request session timeout:
+                # the gg-dl -> work.fife -> lh3 redirect chain can otherwise stall
+                # past the per-op timeout and hang the tool. On timeout, skip this
+                # image rather than block forever.
+                filepath = await asyncio.wait_for(
+                    image.save(
+                        path=str(IMAGES_DIR),
+                        filename=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}.png",
+                        verbose=False,
+                        full_size=full_size,
+                        cookies=_image_download_cookies(client),
+                    ),
+                    timeout=DOWNLOAD_TIMEOUT + 20,
                 )
+            except asyncio.TimeoutError:
+                logger.warning("Image %d download exceeded %.0fs — skipping", i, DOWNLOAD_TIMEOUT + 20)
+                continue
             except Exception as save_err:
                 logger.warning("Image save failed for %d: %s", i, save_err)
                 continue
