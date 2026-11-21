@@ -51,6 +51,11 @@ GEN_TIMEOUT = float(os.environ.get("GEMINI_GEN_TIMEOUT", "600"))
 # Per-network-op timeout for image download in image.save() (seconds). Without
 # this the CDN fetch of the full-size (=s0, ~4.5MB) image can hang forever.
 DOWNLOAD_TIMEOUT = float(os.environ.get("GEMINI_DOWNLOAD_TIMEOUT", "60"))
+# Overall cap for the c8o8Fe 2x-upscale RPC (seconds). Its one HTTP post carries
+# timeout=60, but if that is not honoured (loop stall, redirect, retry) the call
+# is otherwise unbounded and hangs the whole tool — so wrap it here and fall back
+# to preview resolution on timeout. Override with GEMINI_UPSCALE_TIMEOUT.
+UPSCALE_TIMEOUT = float(os.environ.get("GEMINI_UPSCALE_TIMEOUT", "90"))
 
 # Optional stage timing: set GEMINI_DEBUG_TIMING=1 to log per-stage wall-time.
 _DEBUG_TIMING = os.environ.get("GEMINI_DEBUG_TIMING") == "1"
@@ -1063,7 +1068,17 @@ async def gemini_generate_image(
                 token = _image_tokens.pop(image.url, None)
                 if token and metadata:
                     logger.info("Requesting 2x download URL for image %d...", i)
-                    dl_url = await _fetch_download_url(client, token, prompt, metadata, i)
+                    try:
+                        dl_url = await asyncio.wait_for(
+                            _fetch_download_url(client, token, prompt, metadata, i),
+                            timeout=UPSCALE_TIMEOUT,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "2x upscale URL for image %d exceeded %.0fs — using preview resolution",
+                            i, UPSCALE_TIMEOUT,
+                        )
+                        dl_url = None
                     if dl_url:
                         download_urls[i] = dl_url
                         logger.info("Got 2x download URL for image %d", i)
@@ -1105,13 +1120,23 @@ async def gemini_generate_image(
                 image.url = _with_alr(image.url)
 
             try:
-                filepath = await image.save(
-                    path=str(IMAGES_DIR),
-                    filename=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}.png",
-                    verbose=False,
-                    full_size=full_size,
-                    cookies=_image_download_cookies(client),
+                # Hard overall cap in addition to the per-request session timeout:
+                # the gg-dl -> work.fife -> lh3 redirect chain can otherwise stall
+                # past the per-op timeout and hang the tool. On timeout, skip this
+                # image rather than block forever.
+                filepath = await asyncio.wait_for(
+                    image.save(
+                        path=str(IMAGES_DIR),
+                        filename=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}.png",
+                        verbose=False,
+                        full_size=full_size,
+                        cookies=_image_download_cookies(client),
+                    ),
+                    timeout=DOWNLOAD_TIMEOUT + 20,
                 )
+            except asyncio.TimeoutError:
+                logger.warning("Image %d download exceeded %.0fs — skipping", i, DOWNLOAD_TIMEOUT + 20)
+                continue
             except Exception as save_err:
                 logger.warning("Image save failed for %d: %s", i, save_err)
                 continue
