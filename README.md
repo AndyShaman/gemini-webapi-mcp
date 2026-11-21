@@ -434,10 +434,13 @@ If cookie auto-detection fails, set them manually:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `GEMINI_COOKIES_FILE` | Path to an exported **full** google.com cookie file (Netscape `cookies.txt` or a JSON array). Preferred: carries the whole session, so it works where the two cookies below now return HTTP 400, and on Windows where Chrome's store can't be read. | — |
 | `GEMINI_PSID` | Cookie value `__Secure-1PSID` | auto from Chrome |
 | `GEMINI_PSIDTS` | Cookie value `__Secure-1PSIDTS` | auto from Chrome |
 | `GEMINI_LANGUAGE` | Gemini response language (`ru`, `en`, `ja`, ...) | `en` |
 | `GEMINI_ACCOUNT_INDEX` | Google account index (0, 1, 2, ...) | `0` |
+
+> **Since Google's 2026-11-12 web build**, the two `__Secure-1PSID*` cookies alone get every request answered with HTTP 400 ("Are you signed in?"). Export the full google.com cookie set from a browser signed in to [gemini.google.com](https://gemini.google.com) and point `GEMINI_COOKIES_FILE` at the file. When it is set, `GEMINI_PSID`/`GEMINI_PSIDTS` are ignored. Only `.google.com` / `gemini.google.com` cookies are loaded, each kept to its own domain; the file holds a live login, so keep it as private as a password.
 
 ## High Resolution (2x)
 

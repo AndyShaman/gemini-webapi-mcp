@@ -95,6 +95,7 @@ def _stage(label: str, t0: float) -> float:
 _ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 _WHITE = 255.0                        # the ✦ is a neutral-white overlay
 _ANCHOR_MARGINS = (96, 32)            # the two corner slots Gemini stamps the ✦ at
+_CORR_PRESENT = 0.35                  # pre-removal corr below this → no ✦ here, don't touch
 _CORR_GHOST = -0.30                   # post-removal corr below this → revert (would ghost)
 _CORR_WORSE = 0.10                    # post-removal |corr| may not grow beyond this
 _wm_shape = None                      # cache: normalized ✦ shape (0..1)
@@ -218,10 +219,20 @@ def _remove_watermark(image_path: str, upscaled: bool = False) -> Optional[bool]
             box = arr[y0:y0 + logo, x0:x0 + logo]
             if box.shape[0] != logo or box.shape[1] != logo:
                 continue
+            # Require the ✦ to actually be there before subtracting. Since
+            # 2026-11 many txt2img downloads carry no visible ✦ at all, and on
+            # structured backgrounds (an edge through the box) the plane-fit
+            # opacity reads the background as overlay (A≈0.15), so subtracting
+            # stamped a dark ghost the post-check missed. Absent-✦ corr measured
+            # ≤0.15; a real ✦ at A≥0.27 reads ≥0.47 even across such an edge.
+            # Trade-off: a very faint ✦ (A≲0.10) on a busy background is left —
+            # nearly invisible — rather than risking a clearly visible ghost.
+            before_corr = _star_corr(box, sh)
+            if before_corr < _CORR_PRESENT:
+                continue
             A = _estimate_alpha(arr, x0, y0, logo)
             if A is None or A <= 0.0:
                 continue                          # no overlay here (fit opacity ≈0)
-            before_corr = _star_corr(box, sh)
             before = arr.copy()
             alpha = sh * A
             premult = (alpha * _WHITE)[..., None]
@@ -297,6 +308,196 @@ def _resolve_cookies() -> tuple[str, str]:
     )
 
 
+# Cookie domains that make up the Gemini web session.
+_GEMINI_COOKIE_DOMAINS = frozenset({".google.com", "gemini.google.com", ".gemini.google.com"})
+
+
+def _read_cookie_file_rows(text: str):
+    """Parse an exported cookie file into (domain, name, value, path, expires) rows.
+
+    Accepts two formats, auto-detected:
+      * a JSON array export ([{domain, name, value, path, expirationDate}, ...])
+        as produced by browser cookie-export extensions, and
+      * Netscape cookies.txt (tab-separated, with the optional `#HttpOnly_`
+        domain prefix some tools write).
+    `expires` is a POSIX timestamp, or None for a session cookie. Rows that do
+    not parse are skipped; the file's own content is never raised or logged.
+    """
+    rows: list[tuple[str, str, str, str, Optional[float]]] = []
+    stripped = text.lstrip()
+    if stripped[:1] in ("[", "{"):
+        try:
+            data = json.loads(text)
+        except Exception:
+            return rows
+        if isinstance(data, dict):
+            data = data.get("cookies", [])
+        for c in data if isinstance(data, list) else []:
+            if not isinstance(c, dict):
+                continue
+            name = c.get("name")
+            value = c.get("value")
+            domain = c.get("domain")
+            if not name or value is None or not domain:
+                continue
+            exp = c.get("expirationDate", c.get("expires"))
+            try:
+                expires = float(exp) if exp is not None else None
+            except (TypeError, ValueError):
+                expires = None
+            rows.append((domain, name, str(value), c.get("path") or "/", expires))
+        return rows
+
+    # Netscape cookies.txt
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith("#") and not line.startswith("#HttpOnly_"):
+            continue
+        fields = line.split("\t")
+        if len(fields) < 7:
+            continue
+        domain = fields[0]
+        if domain.startswith("#HttpOnly_"):
+            domain = domain[len("#HttpOnly_"):]
+        path, expiry_raw, name, value = fields[2], fields[4], fields[5], fields[6]
+        try:
+            expires = float(expiry_raw)
+        except (TypeError, ValueError):
+            expires = None
+        rows.append((domain, name, value, path or "/", expires))
+    return rows
+
+
+def _file_cookie_jar(path: str):
+    """Load the full Gemini web session from a cookie file the user exported.
+
+    On Windows, Chrome's cookie store can't be read by browser-cookie3 (app-bound
+    encryption), and since Google's 2026-11-12 web build the two PSID cookies
+    alone get every request answered with HTTP 400. The user exports their
+    google.com cookies (Netscape cookies.txt or a JSON array) while signed in to
+    Gemini and points GEMINI_COOKIES_FILE at the file.
+
+    Only Gemini-session-domain cookies are kept, each with its real domain so it
+    is only ever sent to Google hosts; expired cookies are dropped. Raises
+    RuntimeError — never containing a cookie value — when the file is missing or
+    carries no __Secure-1PSID session cookie.
+    """
+    import time
+
+    from curl_cffi.requests import Cookies
+
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f"Cookie file not found: {path}")
+
+    rows = _read_cookie_file_rows(p.read_text(encoding="utf-8", errors="replace"))
+    now = time.time()
+    jar = Cookies()
+    for domain, name, value, cpath, expires in rows:
+        if domain not in _GEMINI_COOKIE_DOMAINS or not value:
+            continue
+        if expires is not None and 0 < expires < now:
+            continue
+        jar.set(name, value, domain=domain, path=cpath or "/")
+
+    if not jar.get("__Secure-1PSID", domain=".google.com"):
+        raise RuntimeError(
+            f"Cookie file {path} has no __Secure-1PSID Google session cookie. "
+            "Export the full google.com cookie set while signed in to "
+            "gemini.google.com and try again."
+        )
+    return jar
+
+
+def _browser_cookie_jar():
+    """Return Chrome's full Gemini-session cookie jar, or None.
+
+    Since Google's 2026-11-12 web build, __Secure-1PSID + __Secure-1PSIDTS alone
+    get every batchexecute / StreamGenerate request answered with HTTP 400; the
+    browser's whole google.com session (SID, HSID, SSID, OSID, SIDCC, ...) is
+    required. Cookies keep their domain so they are only ever sent to Google
+    hosts; foreign ccTLD and other-subdomain cookies are dropped.
+
+    Returns None when GEMINI_PSID overrides auth or Chrome cannot be read.
+    Cookie values are never logged.
+    """
+    if os.environ.get("GEMINI_PSID"):
+        return None
+    try:
+        import browser_cookie3
+        from curl_cffi.requests import Cookies
+
+        cookie_file = os.environ.get("CHROME_COOKIE_FILE") or None
+        jar = Cookies()
+        for c in browser_cookie3.chrome(domain_name=".google.com", cookie_file=cookie_file):
+            if c.domain in _GEMINI_COOKIE_DOMAINS and c.value:
+                jar.set(c.name, c.value, domain=c.domain, path=c.path or "/")
+        return jar if jar.get("__Secure-1PSID", domain=".google.com") else None
+    except Exception as exc:
+        logger.warning("browser-cookie3: could not load full Chrome cookie set — %s", type(exc).__name__)
+        return None
+
+
+async def _new_client():
+    """Create, initialise and patch a GeminiClient (startup and gemini_reset)."""
+    from gemini_webapi import GeminiClient
+
+    # GEMINI_COOKIES_FILE (the user's exported full google.com cookie set) is
+    # preferred: on Windows the Chrome store can't be read, and the two PSID
+    # cookies alone now get HTTP 400. The file carries the whole session, so the
+    # constructor's PSID/PSIDTS are drawn from it rather than from the env vars.
+    cookies_file = os.environ.get("GEMINI_COOKIES_FILE")
+    full_jar = _file_cookie_jar(cookies_file) if cookies_file else _browser_cookie_jar()
+
+    if cookies_file:
+        psid = full_jar.get("__Secure-1PSID", domain=".google.com")
+        psidts = full_jar.get("__Secure-1PSIDTS", domain=".google.com") or ""
+        logger.info("Using the exported cookie file for the Gemini session")
+    else:
+        psid, psidts = _resolve_cookies()
+
+    account_index = int(os.environ.get("GEMINI_ACCOUNT_INDEX", "0"))
+    client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index)
+    if full_jar is not None:
+        # Replace rather than merge: the constructor's domain-less PSID copies
+        # would make gemini_webapi's name-only cookie lookups ambiguous.
+        client.cookies = full_jar
+        logger.info("Using full cookie set for the Gemini session (%d cookies)", len(full_jar.jar))
+    if account_index:
+        logger.info("Using Google account index: %d", account_index)
+    await client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
+    _patch_client(client)
+    return client
+
+
+def _with_alr(url: str) -> str:
+    """Append ?alr=yes to an lh3 gg-dl image link.
+
+    Since Google's 2026-11-12 web build, gg-dl links answer HTTP 403 unless
+    ?alr=yes follows the size suffix (the web app fetches `...=s1024-rw?alr=yes`).
+    With it, the usual text-redirect chain (gg-dl -> work.fife.usercontent
+    rd-gg-dl -> lh3 rd-gg-dl) ends in the image.
+    """
+    if "/gg-dl/" not in url or "alr=" in url:
+        return url
+    return url + ("&" if "?" in url else "?") + "alr=yes"
+
+
+def _image_download_cookies(client):
+    """Return the client's domain-tagged cookie jar for image downloads, or None.
+
+    GeneratedImage's pydantic field (`dict[str, str] | Cookies`) coerces the
+    client's jar to a plain dict, losing cookie domains; the library then pins
+    every cookie to .google.com. The work.fife.usercontent.google.com hop of the
+    gg-dl chain then hands out a final lh3 link that answers HTTP 403. Passing
+    the jar to save() explicitly keeps the domains. None falls back to the
+    image's own cookies.
+    """
+    jar = getattr(client, "cookies", None)
+    return jar if hasattr(jar, "jar") else None
+
+
 def _make_gen_id() -> str:
     """Generate a client-side gen_id for c8o8Fe RPC (16-char repeating pattern)."""
     base = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -309,16 +510,7 @@ def _make_gen_id() -> str:
 
 @asynccontextmanager
 async def app_lifespan(server):
-    from gemini_webapi import GeminiClient
-
-    psid, psidts = _resolve_cookies()
-
-    account_index = int(os.environ.get("GEMINI_ACCOUNT_INDEX", "0"))
-    client = GeminiClient(secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index)
-    if account_index:
-        logger.info("Using Google account index: %d", account_index)
-    await client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
-    _patch_client(client)
+    client = await _new_client()
 
     yield {"gemini_client": client, "chat_sessions": {}}
 
@@ -887,26 +1079,33 @@ async def gemini_generate_image(
                 pass
             # Use 2x upscale URL from c8o8Fe if available
             has_upscale = i in download_urls
+            # full_size=False when the URL already carries its size suffix (=s0);
+            # otherwise library's =s2048 is needed for full-size preview download.
+            # Without this gating, an un-upscaled URL with no suffix drops to a
+            # ~382px thumbnail instead of the ~896px preview.
+            full_size = not has_upscale
             if has_upscale:
                 # Use c8o8Fe 2x URL with =s0 for full resolution (not =s2048 which downscales)
                 image.url = re.sub(r"=[^/]*$", "", download_urls[i]) + "=s0"
             elif re.search(r"=s\d+(-[a-z0-9]+)*$", image.url):
                 # googleusercontent URL with an explicit =sNNNN size suffix: bump to
-                # =s0 for full resolution. gg-dl token URLs have no such suffix and
-                # reject =s0 with HTTP 400, so we leave those untouched (download as-is,
-                # which already returns the full-size image).
+                # =s0 for full resolution.
                 image.url = re.sub(r"=s\d+(-[a-z0-9]+)*$", "=s0", image.url)
+            elif "/gg-dl/" in image.url:
+                # gg-dl token URL: add the size suffix here (=s0 = full native
+                # resolution) so ?alr=yes can follow it; see _with_alr.
+                image.url += "=s0"
+                full_size = False
+            if not full_size:
+                image.url = _with_alr(image.url)
 
             try:
-                # full_size=False only when c8o8Fe already gave us a URL with =s0;
-                # otherwise library's =s2048 is needed for full-size preview download.
-                # Without this gating, an un-upscaled URL with no suffix drops to a
-                # ~382px thumbnail instead of the ~896px preview.
                 filepath = await image.save(
                     path=str(IMAGES_DIR),
                     filename=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}.png",
                     verbose=False,
-                    full_size=not has_upscale,
+                    full_size=full_size,
+                    cookies=_image_download_cookies(client),
                 )
             except Exception as save_err:
                 logger.warning("Image save failed for %d: %s", i, save_err)
@@ -1043,19 +1242,10 @@ async def gemini_reset(ctx: Context) -> str:
         Confirmation message or error.
     """
     try:
-        from gemini_webapi import GeminiClient
-
         old = _get_client(ctx)
         await old.close()
 
-        psid, psidts = _resolve_cookies()
-
-        account_index = int(os.environ.get("GEMINI_ACCOUNT_INDEX", "0"))
-        new_client = GeminiClient(
-            secure_1psid=psid, secure_1psidts=psidts or None, account_index=account_index
-        )
-        await new_client.init(timeout=300, watchdog_timeout=45, auto_close=False, auto_refresh=True)
-        _patch_client(new_client)
+        new_client = await _new_client()
 
         ctx.request_context.lifespan_context["gemini_client"] = new_client
         return "Gemini client re-initialised with fresh cookies."
