@@ -356,6 +356,11 @@ def _read_cookie_file_rows(text: str):
             continue
         fields = line.split("\t")
         if len(fields) < 7:
+            # Some exports (and hand-saved files) use spaces, not tabs. Cookie
+            # fields here carry no internal spaces, so a generic split recovers
+            # them; the tab split is tried first so a value with spaces is kept.
+            fields = line.split()
+        if len(fields) < 7:
             continue
         domain = fields[0]
         if domain.startswith("#HttpOnly_"):

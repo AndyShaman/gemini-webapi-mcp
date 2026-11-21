@@ -45,6 +45,18 @@ def test_netscape_file_keeps_google_cookies_with_their_domains(tmp_path):
     assert ".google.co.uk" not in domains and ".youtube.com" not in domains
 
 
+def test_space_separated_netscape_is_read(tmp_path):
+    # A file whose columns are space-delimited instead of tab-delimited.
+    p = _write(tmp_path, "c.txt", "# Netscape HTTP Cookie File\n\n" + "\n".join(
+        " ".join(map(str, l)) for l in [
+            (".google.com", "TRUE", "/", "TRUE", FUTURE, "__Secure-1PSID", "psid-value"),
+            ("#HttpOnly_.google.com", "TRUE", "/", "TRUE", FUTURE, "SID", "sid-value"),
+        ]) + "\n")
+    jar = server._file_cookie_jar(str(p))
+    assert jar.get("__Secure-1PSID", domain=".google.com") == "psid-value"
+    assert jar.get("SID", domain=".google.com") == "sid-value"
+
+
 def test_expired_cookies_are_skipped(tmp_path):
     p = _write(tmp_path, "c.txt", _netscape([
         (".google.com", "TRUE", "/", "TRUE", FUTURE, "__Secure-1PSID", "psid-value"),
